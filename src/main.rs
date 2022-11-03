@@ -1,19 +1,26 @@
 use ggez::glam::*;
 use ggez::{conf, event, graphics, timer, Context, GameResult};
 
+mod gfx;
+
 const SCREEN_WIDTH_TILES: u32 = 60;
 const SCREEN_HEIGHT_TILES: u32 = 35;
 
 struct MainState {
     instances: ggez::graphics::InstanceArray,
+    tilesheet: gfx::SpriteSet,
 }
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
+        let tilesheet = gfx::SpriteSet::new(16, 16, 12, 12);
         let image = graphics::Image::from_path(ctx, "/nice-curses.png")?;
         let mut instances = graphics::InstanceArray::new(ctx, image);
         instances.resize(ctx, SCREEN_WIDTH_TILES * SCREEN_HEIGHT_TILES);
-        Ok(MainState { instances })
+        Ok(MainState {
+            instances,
+            tilesheet,
+        })
     }
 }
 
@@ -33,8 +40,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         // Currently broken, https://github.com/ggez/ggez/issues/1127
         canvas.set_sampler(graphics::Sampler::nearest_clamp());
 
-        let tile_width = 12.0 / (16.0 * 12.0);
-        let tile_height = 12.0 / (16.0 * 12.0);
+        let tilesheet = &self.tilesheet;
         self.instances.set((0..SCREEN_WIDTH_TILES).flat_map(|x| {
             (0..SCREEN_HEIGHT_TILES).map(move |y| {
                 let x = x as f32;
@@ -42,12 +48,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 graphics::DrawParam::new()
                     .dest(Vec2::new(x * 12.0, y * 12.0))
                     // 16x16 tiles, tile: 12x12 px
-                    .src(graphics::Rect::new(
-                        tile_width,
-                        0.0,
-                        tile_width,
-                        tile_height,
-                    ))
+                    .src(tilesheet.src(0, 4).unwrap())
             })
         }));
 
@@ -55,13 +56,13 @@ impl event::EventHandler<ggez::GameError> for MainState {
             (canvas.scissor_rect().w / (SCREEN_WIDTH_TILES as f32 * 12.))
                 .min(canvas.scissor_rect().h / (SCREEN_HEIGHT_TILES as f32 * 12.)),
         );
-
-        let x = (canvas.scissor_rect().w - (SCREEN_WIDTH_TILES as f32 * 12.) * scale.x) / 2.;
-        let y = (canvas.scissor_rect().h - (SCREEN_HEIGHT_TILES as f32 * 12.) * scale.y) / 2.;
         canvas.draw(
             &self.instances,
             graphics::DrawParam::new()
-                .dest(Vec2::new(x, y))
+                .dest(Vec2::new(
+                    (canvas.scissor_rect().w - (SCREEN_WIDTH_TILES as f32 * 12.) * scale.x) / 2.,
+                    (canvas.scissor_rect().h - (SCREEN_HEIGHT_TILES as f32 * 12.) * scale.y) / 2.,
+                ))
                 .scale(scale),
         );
 
