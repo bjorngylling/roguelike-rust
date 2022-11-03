@@ -1,5 +1,6 @@
-use ggez::glam::*;
+use ggez::input::keyboard::{KeyCode, KeyInput};
 use ggez::{conf, event, graphics, timer, Context, GameResult};
+use ggez::{glam::*, GameError};
 
 mod gfx;
 
@@ -9,6 +10,7 @@ const SCREEN_HEIGHT_TILES: u32 = 35;
 struct MainState {
     instances: ggez::graphics::InstanceArray,
     tilesheet: gfx::SpriteSet,
+    hero: Hero,
 }
 
 impl MainState {
@@ -17,9 +19,16 @@ impl MainState {
         let image = graphics::Image::from_path(ctx, "/nice-curses.png")?;
         let mut instances = graphics::InstanceArray::new(ctx, image);
         instances.resize(ctx, SCREEN_WIDTH_TILES * SCREEN_HEIGHT_TILES);
+        let hero = Hero {
+            pos: vec2(10., 10.),
+            spr: tilesheet
+                .src(0, 4)
+                .ok_or_else(|| GameError::CustomError(String::from("invalid sprite")))?,
+        };
         Ok(MainState {
             instances,
             tilesheet,
+            hero,
         })
     }
 }
@@ -35,7 +44,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let mut canvas = graphics::Canvas::from_frame(ctx, graphics::Color::BLACK);
+        let mut canvas = graphics::Canvas::from_frame(ctx, gfx::BACKGROUND);
 
         // Currently broken, https://github.com/ggez/ggez/issues/1127
         canvas.set_sampler(graphics::Sampler::nearest_clamp());
@@ -46,11 +55,15 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 let x = x as f32;
                 let y = y as f32;
                 graphics::DrawParam::new()
-                    .dest(Vec2::new(x * 12.0, y * 12.0))
-                    // 16x16 tiles, tile: 12x12 px
-                    .src(tilesheet.src(0, 4).unwrap())
+                    .dest(Vec2::new(x * 12., y * 12.))
+                    .src(tilesheet.src(14, 2).unwrap())
             })
         }));
+        self.instances.push(
+            graphics::DrawParam::new()
+                .dest(self.hero.pos * 12.)
+                .src(self.hero.spr),
+        );
 
         let scale = Vec2::splat(
             (canvas.scissor_rect().w / (SCREEN_WIDTH_TILES as f32 * 12.))
@@ -69,6 +82,23 @@ impl event::EventHandler<ggez::GameError> for MainState {
         canvas.finish(ctx)?;
         Ok(())
     }
+
+    fn key_down_event(&mut self, ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
+        match input.keycode {
+            Some(KeyCode::Up) => self.hero.pos += vec2(0., -1.),
+            Some(KeyCode::Down) => self.hero.pos += vec2(0., 1.),
+            Some(KeyCode::Left) => self.hero.pos += vec2(-1., 0.),
+            Some(KeyCode::Right) => self.hero.pos += vec2(1., 0.),
+            Some(KeyCode::Escape) => ctx.request_quit(),
+            _ => (),
+        };
+        Ok(())
+    }
+}
+
+struct Hero {
+    pos: Vec2,
+    spr: graphics::Rect,
 }
 
 fn main() -> GameResult {
