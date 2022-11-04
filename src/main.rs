@@ -56,13 +56,17 @@ impl event::EventHandler<ggez::GameError> for MainState {
         let mut action = self.hero.get_action();
         let player_took_action = action.is_some();
         while let Some(a) = action {
-            action = a.perform(&mut self.hero.physics)
+            action = match a {
+                Action::Move(d) => move_handler(&mut self.hero.physics, d),
+            }
         }
         if player_took_action {
             for m in &mut self.monsters {
                 let mut action = m.get_action();
                 while let Some(a) = action {
-                    action = a.perform(&mut m.physics)
+                    action = match a {
+                        Action::Move(d) => move_handler(&mut m.physics, d),
+                    }
                 }
             }
         }
@@ -126,19 +130,13 @@ impl event::EventHandler<ggez::GameError> for MainState {
     }
 }
 
-struct Move {
-    d: Vec2,
+enum Action {
+    Move(Vec2),
 }
 
-impl Action for Move {
-    fn perform(&self, p: &mut Physics) -> Option<Box<dyn Action>> {
-        p.pos += self.d;
-        None
-    }
-}
-
-trait Action {
-    fn perform(&self, actor: &mut Physics) -> Option<Box<dyn Action>>;
+fn move_handler(phys: &mut Physics, d: Vec2) -> Option<Action> {
+    phys.pos += d;
+    None
 }
 
 struct Physics {
@@ -148,21 +146,21 @@ struct Physics {
 struct Hero {
     physics: Physics,
     spr: graphics::Rect,
-    next_action: Option<Box<dyn Action>>,
+    next_action: Option<Action>,
 }
 
 impl Hero {
     fn handle_input(&mut self, input: KeyInput) {
         self.next_action = match input.keycode {
-            Some(KeyCode::Up) => Some(Box::new(Move { d: vec2(0., -1.) })),
-            Some(KeyCode::Down) => Some(Box::new(Move { d: vec2(0., 1.) })),
-            Some(KeyCode::Left) => Some(Box::new(Move { d: vec2(-1., 0.) })),
-            Some(KeyCode::Right) => Some(Box::new(Move { d: vec2(1., 0.) })),
+            Some(KeyCode::Up) => Some(Action::Move(vec2(0., -1.))),
+            Some(KeyCode::Down) => Some(Action::Move(vec2(0., 1.))),
+            Some(KeyCode::Left) => Some(Action::Move(vec2(-1., 0.))),
+            Some(KeyCode::Right) => Some(Action::Move(vec2(1., 0.))),
             _ => None,
         }
     }
 
-    fn get_action(&mut self) -> Option<Box<dyn Action>> {
+    fn get_action(&mut self) -> Option<Action> {
         self.next_action.take()
     }
 }
@@ -173,8 +171,8 @@ struct Monster {
 }
 
 impl Monster {
-    fn get_action(&mut self) -> Option<Box<dyn Action>> {
-        Some(Box::new(Move { d: vec2(0., -1.) }))
+    fn get_action(&mut self) -> Option<Action> {
+        Some(Action::Move(vec2(0., -1.)))
     }
 }
 
