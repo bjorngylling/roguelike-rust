@@ -10,8 +10,8 @@ const SCREEN_HEIGHT_TILES: u32 = 35;
 struct MainState {
     instances: ggez::graphics::InstanceArray,
     sprite_set: gfx::SpriteSet,
-    hero: Hero,
-    monsters: Vec<Monster>,
+    hero_id: usize,
+    entities: Vec<Entity>,
 }
 
 impl MainState {
@@ -20,28 +20,33 @@ impl MainState {
         let image = graphics::Image::from_path(ctx, "/nice-curses.png")?;
         let mut instances = graphics::InstanceArray::new(ctx, image);
         instances.resize(ctx, SCREEN_WIDTH_TILES * SCREEN_HEIGHT_TILES);
-        let hero = Hero {
-            physics: Physics {
-                pos: vec2(10., 10.),
+        let entities = vec![
+            Entity {
+                physics: Physics {
+                    pos: vec2(10., 10.),
+                },
+                spr: sprite_set
+                    .src(0, 4)
+                    .ok_or_else(|| GameError::CustomError(String::from("invalid sprite")))?,
+                next_action: None,
+                player: true,
             },
-            spr: sprite_set
-                .src(0, 4)
-                .ok_or_else(|| GameError::CustomError(String::from("invalid sprite")))?,
-            next_action: None,
-        };
-        let monster = Monster {
-            physics: Physics {
-                pos: vec2(20., 14.),
+            Entity {
+                physics: Physics {
+                    pos: vec2(20., 14.),
+                },
+                spr: sprite_set
+                    .src(1, 6)
+                    .ok_or_else(|| GameError::CustomError(String::from("invalid sprite")))?,
+                next_action: None,
+                player: false,
             },
-            spr: sprite_set
-                .src(1, 6)
-                .ok_or_else(|| GameError::CustomError(String::from("invalid sprite")))?,
-        };
+        ];
         Ok(MainState {
             instances,
             sprite_set,
-            hero,
-            monsters: vec![monster],
+            hero_id: 0,
+            entities,
         })
     }
 }
@@ -53,19 +58,22 @@ impl event::EventHandler<ggez::GameError> for MainState {
             timer::sleep(std::time::Duration::from_secs(0));
         }
 
-        let mut action = self.hero.get_action();
+        let hero = &mut self.entities[self.hero_id];
+        let mut action = hero.next_action.take();
         let player_took_action = action.is_some();
         while let Some(a) = action {
             action = match a {
-                Action::Move(d) => move_handler(&mut self.hero.physics, d),
+                Action::Move(d) => move_handler(&mut hero.physics, d),
             }
         }
         if player_took_action {
-            for m in &mut self.monsters {
-                let mut action = m.get_action();
-                while let Some(a) = action {
-                    action = match a {
-                        Action::Move(d) => move_handler(&mut m.physics, d),
+            for e in &mut self.entities {
+                if !e.player {
+                    let mut action = ai_handler(e);
+                    while let Some(a) = action {
+                        action = match a {
+                            Action::Move(d) => move_handler(&mut e.physics, d),
+                        }
                     }
                 }
             }
@@ -90,12 +98,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                     .src(tilesheet.src(14, 2).unwrap())
             })
         }));
-        self.instances.push(
-            graphics::DrawParam::new()
-                .dest(self.hero.physics.pos * 12.)
-                .src(self.hero.spr),
-        );
-        self.monsters.iter().for_each(|m| {
+        self.entities.iter().for_each(|m| {
             self.instances.push(
                 graphics::DrawParam::new()
                     .dest(m.physics.pos * 12.)
@@ -124,14 +127,28 @@ impl event::EventHandler<ggez::GameError> for MainState {
     fn key_down_event(&mut self, ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
         match input.keycode {
             Some(KeyCode::Escape) => ctx.request_quit(),
-            _ => self.hero.handle_input(input),
+            _ => self.entities[self.hero_id].next_action = handle_input(input),
         };
         Ok(())
     }
 }
 
+fn handle_input(input: KeyInput) -> Option<Action> {
+    match input.keycode {
+        Some(KeyCode::Up) => Some(Action::Move(vec2(0., -1.))),
+        Some(KeyCode::Down) => Some(Action::Move(vec2(0., 1.))),
+        Some(KeyCode::Left) => Some(Action::Move(vec2(-1., 0.))),
+        Some(KeyCode::Right) => Some(Action::Move(vec2(1., 0.))),
+        _ => None,
+    }
+}
+
 enum Action {
     Move(Vec2),
+}
+
+fn ai_handler(_ent: &Entity) -> Option<Action> {
+    Some(Action::Move(vec2(0., -1.)))
 }
 
 fn move_handler(phys: &mut Physics, d: Vec2) -> Option<Action> {
@@ -143,37 +160,11 @@ struct Physics {
     pos: Vec2,
 }
 
-struct Hero {
+struct Entity {
     physics: Physics,
     spr: graphics::Rect,
     next_action: Option<Action>,
-}
-
-impl Hero {
-    fn handle_input(&mut self, input: KeyInput) {
-        self.next_action = match input.keycode {
-            Some(KeyCode::Up) => Some(Action::Move(vec2(0., -1.))),
-            Some(KeyCode::Down) => Some(Action::Move(vec2(0., 1.))),
-            Some(KeyCode::Left) => Some(Action::Move(vec2(-1., 0.))),
-            Some(KeyCode::Right) => Some(Action::Move(vec2(1., 0.))),
-            _ => None,
-        }
-    }
-
-    fn get_action(&mut self) -> Option<Action> {
-        self.next_action.take()
-    }
-}
-
-struct Monster {
-    physics: Physics,
-    spr: graphics::Rect,
-}
-
-impl Monster {
-    fn get_action(&mut self) -> Option<Action> {
-        Some(Action::Move(vec2(0., -1.)))
-    }
+    player: bool,
 }
 
 fn main() -> GameResult {
