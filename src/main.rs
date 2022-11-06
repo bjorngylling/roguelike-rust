@@ -25,9 +25,12 @@ impl MainState {
                 physics: Physics {
                     pos: vec2(10., 10.),
                 },
-                spr: sprite_set
+                renderable: Renderable {
+                    spr: sprite_set
                     .src(0, 4)
                     .ok_or_else(|| GameError::CustomError(String::from("invalid sprite")))?,
+                    color: gfx::WHITE_BRIGHT,
+                },
                 next_action: None,
                 player: true,
             },
@@ -35,9 +38,12 @@ impl MainState {
                 physics: Physics {
                     pos: vec2(20., 14.),
                 },
-                spr: sprite_set
+                renderable: Renderable {
+                    spr: sprite_set
                     .src(1, 6)
                     .ok_or_else(|| GameError::CustomError(String::from("invalid sprite")))?,
+                    color: gfx::BLUE_BRIGHT,
+                },
                 next_action: None,
                 player: false,
             },
@@ -102,7 +108,8 @@ impl event::EventHandler<ggez::GameError> for MainState {
             self.instances.push(
                 graphics::DrawParam::new()
                     .dest(m.physics.pos * 12.)
-                    .src(m.spr),
+                    .src(m.renderable.spr)
+                    .color(m.renderable.color),
             );
         });
 
@@ -160,10 +167,15 @@ struct Physics {
     pos: Vec2,
 }
 
+struct Renderable {
+    spr: graphics::Rect,
+    color: graphics::Color,
+}
+
 struct Entity {
     physics: Physics,
-    spr: graphics::Rect,
     next_action: Option<Action>,
+    renderable: Renderable,
     player: bool,
 }
 
