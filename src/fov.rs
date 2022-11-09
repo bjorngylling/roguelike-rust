@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use crate::map::{Point, pt};
+use crate::geom::{Point, pt};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Angles {

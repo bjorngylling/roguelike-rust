@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{fov, gfx, map};
+use crate::{fov, gfx, geom};
 use ggez::glam::*;
 use ggez::{
     graphics,
@@ -14,7 +14,7 @@ pub struct MainState {
     sprite_set: gfx::SpriteSet,
     hero_id: EntityId,
     entities: Vec<Entity>,
-    map_layer: map::Map,
+    map_layer: geom::Map,
 }
 
 impl MainState {
@@ -24,9 +24,9 @@ impl MainState {
         let mut instances = graphics::InstanceArray::new(ctx, image);
         instances.resize(ctx, (width * height) as u32 + 50); // mapsize + 50 entities
 
-        let mut map_layer = map::Map::new(
+        let mut map_layer = geom::Map::new(
             width, height,
-            map::Tile {
+            geom::Tile {
                 block: false,
                 renderable: gfx::Renderable {
                     spr: sprite_set.src(14, 2),
@@ -121,7 +121,7 @@ impl MainState {
             for y in 0..map_layer.height {
                 let draw = if let Some(v) = viewshed {
                     v.visible_tiles
-                        .contains(&map::Point::new(x as i32, y as i32))
+                        .contains(&geom::Point::new(x as i32, y as i32))
                 } else {
                     true
                 };
@@ -137,7 +137,7 @@ impl MainState {
         }
         self.entities.iter().for_each(|m| {
             let draw = if let Some(v) = viewshed {
-                v.visible_tiles.contains(&map::Point::new(
+                v.visible_tiles.contains(&geom::Point::new(
                     m.physics.pos.x as i32,
                     m.physics.pos.y as i32,
                 ))
@@ -193,7 +193,7 @@ fn ai_handler(id: EntityId, _ent: &Entity) -> Option<Action> {
     Some(Action::Move(id, vec2(-1., 0.)))
 }
 
-fn move_handler(id: usize, entities: &mut Vec<Entity>, d: Vec2, m: &map::Map) -> Option<Action> {
+fn move_handler(id: usize, entities: &mut Vec<Entity>, d: Vec2, m: &geom::Map) -> Option<Action> {
     let n = entities[id].physics.pos + d;
     let t = m[(n.x as i32, n.y as i32)];
     if t.block {
@@ -220,8 +220,8 @@ fn attack_handler(id: EntityId, target: EntityId, entities: &Vec<Entity>) -> Opt
     None
 }
 
-fn fov_handler(id: usize, entities: &mut [Entity], m: &map::Map) -> Option<Action> {
-    let opaque_at = |p: map::Point| {
+fn fov_handler(id: usize, entities: &mut [Entity], m: &geom::Map) -> Option<Action> {
+    let opaque_at = |p: geom::Point| {
         if p.x >= 0 && p.x < m.width as i32 && p.y >= 0 && p.y < m.height as i32 {
             m[p.into()].block
         } else {
@@ -229,7 +229,7 @@ fn fov_handler(id: usize, entities: &mut [Entity], m: &map::Map) -> Option<Actio
         }
     };
     if let Some(v) = &mut entities[id].viewshed {
-        let p = map::Point::new(
+        let p = geom::Point::new(
             entities[id].physics.pos.x as i32,
             entities[id].physics.pos.y as i32,
         );
@@ -244,7 +244,7 @@ struct Physics {
 
 
 struct Viewshed {
-    visible_tiles: HashSet<map::Point>,
+    visible_tiles: HashSet<geom::Point>,
     range: i32,
 }
 

@@ -9,7 +9,7 @@ use ggez::{
 mod game;
 mod gfx;
 mod fov;
-mod map;
+mod geom;
 
 const SCREEN_WIDTH_TILES: i32 = 60;
 const SCREEN_HEIGHT_TILES: i32 = 35;
