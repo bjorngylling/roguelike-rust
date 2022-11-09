@@ -1,4 +1,6 @@
-use crate::gfx;
+use std::collections::HashSet;
+
+use crate::{fov, gfx};
 use ggez::glam::*;
 use ggez::{
     graphics,
@@ -33,9 +35,9 @@ impl MainState {
                 },
             },
         );
-        for x in 0..width {
-            map_layer[[x as usize, 3]].renderable.spr = sprite_set.src(3, 2);
-            map_layer[[x as usize, 3]].block = true;
+        for x in [0, 1, 2, 3, 5, 7, 9, 12, 13, 14] {
+            map_layer[[x as usize, 2]].renderable.spr = sprite_set.src(3, 2);
+            map_layer[[x as usize, 2]].block = true;
         }
         let entities = vec![
             Entity {
@@ -47,8 +49,12 @@ impl MainState {
                     spr: sprite_set.src(0, 4),
                     color: gfx::WHITE_BRIGHT,
                 },
-                next_action: None,
+                next_action: Some(Action::UpdateViewshed(0)), // queue a viewshed update
                 player: true,
+                viewshed: Some(Viewshed {
+                    visible_tiles: HashSet::new(),
+                    range: 5,
+                }),
             },
             Entity {
                 name: "Giant Ant".to_string(),
@@ -61,6 +67,7 @@ impl MainState {
                 },
                 next_action: None,
                 player: false,
+                viewshed: None,
             },
         ];
         Ok(MainState {
@@ -82,6 +89,7 @@ impl MainState {
                 Move(id, d) => move_handler(id, &mut self.entities, d, &self.map_layer),
                 Rest(_) => None,
                 Attack(id, target) => attack_handler(id, target, &self.entities),
+                UpdateViewshed(id) => fov_handler(id, &mut self.entities, &self.map_layer),
             }
         }
         if player_took_action {
@@ -94,6 +102,9 @@ impl MainState {
                             Move(id, d) => move_handler(id, &mut self.entities, d, &self.map_layer),
                             Rest(_) => None,
                             Attack(id, target) => attack_handler(id, target, &self.entities),
+                            UpdateViewshed(id) => {
+                                fov_handler(id, &mut self.entities, &self.map_layer)
+                            }
                         }
                     }
                 }
@@ -106,23 +117,42 @@ impl MainState {
     pub fn draw(&mut self, _ctx: &mut Context) -> &graphics::InstanceArray {
         self.instances.clear();
         let map_layer = &self.map_layer.view();
+        let viewshed = &self.entities[self.hero_id].viewshed;
         for x in 0..map_layer.nrows() {
             for y in 0..map_layer.ncols() {
-                let t = map_layer[[x, y]];
-                self.instances.push(
-                    graphics::DrawParam::new()
-                        .dest(Vec2::new(x as f32 * 12., y as f32 * 12.))
-                        .src(t.renderable.spr),
-                );
+                let draw = if let Some(v) = viewshed {
+                    v.visible_tiles
+                        .contains(&fov::Point::new(x as i32, y as i32))
+                } else {
+                    true
+                };
+                if draw {
+                    let t = map_layer[[x, y]];
+                    self.instances.push(
+                        graphics::DrawParam::new()
+                            .dest(Vec2::new(x as f32 * 12., y as f32 * 12.))
+                            .src(t.renderable.spr),
+                    );
+                }
             }
         }
         self.entities.iter().for_each(|m| {
-            self.instances.push(
-                graphics::DrawParam::new()
-                    .dest(m.physics.pos * 12.)
-                    .src(m.renderable.spr)
-                    .color(m.renderable.color),
-            );
+            let draw = if let Some(v) = viewshed {
+                v.visible_tiles.contains(&fov::Point::new(
+                    m.physics.pos.x as i32,
+                    m.physics.pos.y as i32,
+                ))
+            } else {
+                true
+            };
+            if draw {
+                self.instances.push(
+                    graphics::DrawParam::new()
+                        .dest(m.physics.pos * 12.)
+                        .src(m.renderable.spr)
+                        .color(m.renderable.color),
+                );
+            }
         });
 
         &self.instances
@@ -157,6 +187,7 @@ enum Action {
     Move(EntityId, Vec2),
     Rest(EntityId),
     Attack(EntityId, EntityId),
+    UpdateViewshed(EntityId),
 }
 
 fn ai_handler(id: EntityId, _ent: &Entity) -> Option<Action> {
@@ -173,7 +204,11 @@ fn move_handler(id: usize, entities: &mut Vec<Entity>, d: Vec2, m: &MapLayer) ->
         Some(Action::Attack(id, other))
     } else {
         entities[id].physics.pos = n;
-        None
+        if entities[id].viewshed.is_some() {
+            Some(Action::UpdateViewshed(id))
+        } else {
+            None
+        }
     }
 }
 
@@ -183,6 +218,25 @@ fn attack_handler(id: EntityId, target: EntityId, entities: &Vec<Entity>) -> Opt
         entities[id].name.to_lowercase(),
         entities[target].name.to_lowercase()
     );
+    None
+}
+
+fn fov_handler(id: usize, entities: &mut [Entity], m: &MapLayer) -> Option<Action> {
+    let m = m.view();
+    let opaque_at = |p: fov::Point| {
+        if p.x >= 0 && p.x < m.ncols() as i32 && p.y >= 0 && p.y < m.nrows() as i32 {
+            m[[p.x as usize, p.y as usize]].block
+        } else {
+            false
+        }
+    };
+    if let Some(v) = &mut entities[id].viewshed {
+        let p = fov::Point::new(
+            entities[id].physics.pos.x as i32,
+            entities[id].physics.pos.y as i32,
+        );
+        v.visible_tiles = fov::calculate(p, v.range, opaque_at);
+    }
     None
 }
 
@@ -196,12 +250,18 @@ struct Renderable {
     color: graphics::Color,
 }
 
+struct Viewshed {
+    visible_tiles: HashSet<fov::Point>,
+    range: i32,
+}
+
 struct Entity {
     name: String,
     physics: Physics,
     next_action: Option<Action>,
     renderable: Renderable,
     player: bool,
+    viewshed: Option<Viewshed>,
 }
 
 type MapLayer = Array2<Tile>;

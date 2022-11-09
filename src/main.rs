@@ -8,6 +8,7 @@ use ggez::{
 
 mod game;
 mod gfx;
+mod fov;
 
 const SCREEN_WIDTH_TILES: u32 = 60;
 const SCREEN_HEIGHT_TILES: u32 = 35;
