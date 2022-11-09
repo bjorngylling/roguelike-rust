@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::{
     fov,
-    geom::{pt, Map, Point, Tile},
+    geom::{pt, Map, Point},
     gfx,
 };
 use ggez::glam::*;
@@ -18,7 +18,7 @@ pub struct MainState {
     sprite_set: gfx::SpriteSet,
     hero_id: EntityId,
     entities: Vec<Entity>,
-    map_layer: Map,
+    map_layer: Map<Tile>,
 }
 
 impl MainState {
@@ -198,7 +198,7 @@ fn ai_handler(id: EntityId, _ent: &Entity) -> Option<Action> {
     Some(Action::Move(id, pt(-1, 0)))
 }
 
-fn move_handler(id: usize, entities: &mut Vec<Entity>, d: Point, m: &Map) -> Option<Action> {
+fn move_handler(id: usize, entities: &mut Vec<Entity>, d: Point, m: &Map<Tile>) -> Option<Action> {
     let n = entities[id].physics.pos + d;
     let t = m[n.into()];
     if t.block {
@@ -225,7 +225,7 @@ fn attack_handler(id: EntityId, target: EntityId, entities: &Vec<Entity>) -> Opt
     None
 }
 
-fn fov_handler(id: usize, entities: &mut [Entity], m: &Map) -> Option<Action> {
+fn fov_handler(id: usize, entities: &mut [Entity], m: &Map<Tile>) -> Option<Action> {
     let opaque_at = |p: Point| {
         if p.x >= 0 && p.x < m.width as i32 && p.y >= 0 && p.y < m.height as i32 {
             m[p.into()].block
@@ -256,3 +256,10 @@ struct Entity {
     player: bool,
     viewshed: Option<Viewshed>,
 }
+
+#[derive(Copy, Clone)]
+pub struct Tile {
+    pub renderable: gfx::Renderable,
+    pub block: bool,
+}
+
