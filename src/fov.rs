@@ -23,7 +23,7 @@ impl Angles {
     }
 
     fn contains(self, angle: f32) -> bool {
-        return self.start < angle && angle < self.end;
+        self.start < angle && angle < self.end
     }
 }
 
@@ -105,7 +105,7 @@ fn is_visible(a: Angles, obstructions: &Vec<Angles>) -> bool {
         }
     }
 
-    (start_vis && center_vis) || (end_vis && center_vis)
+    (end_vis || start_vis) && center_vis
 }
 
 #[cfg(test)]

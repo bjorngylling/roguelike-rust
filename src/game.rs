@@ -194,7 +194,7 @@ fn ai_handler(id: EntityId, _ent: &Entity) -> Option<Action> {
     Some(Action::Move(id, pt(-1, 0)))
 }
 
-fn move_handler(id: usize, entities: &mut Vec<Entity>, d: Point, m: &Map<Tile>) -> Option<Action> {
+fn move_handler(id: usize, entities: &mut [Entity], d: Point, m: &Map<Tile>) -> Option<Action> {
     let n = entities[id].physics.pos + d;
     let t = m[n.into()];
     if t.block {
@@ -212,7 +212,7 @@ fn move_handler(id: usize, entities: &mut Vec<Entity>, d: Point, m: &Map<Tile>) 
     }
 }
 
-fn attack_handler(id: EntityId, target: EntityId, entities: &Vec<Entity>) -> Option<Action> {
+fn attack_handler(id: EntityId, target: EntityId, entities: &[Entity]) -> Option<Action> {
     println!(
         "The {} strikes the {}",
         entities[id].name.to_lowercase(),
