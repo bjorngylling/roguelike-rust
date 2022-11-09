@@ -1,6 +1,10 @@
 use std::collections::HashSet;
 
-use crate::{fov, gfx, geom};
+use crate::{
+    fov,
+    geom::{pt, Map, Point, Tile},
+    gfx,
+};
 use ggez::glam::*;
 use ggez::{
     graphics,
@@ -14,7 +18,7 @@ pub struct MainState {
     sprite_set: gfx::SpriteSet,
     hero_id: EntityId,
     entities: Vec<Entity>,
-    map_layer: geom::Map,
+    map_layer: Map,
 }
 
 impl MainState {
@@ -24,9 +28,10 @@ impl MainState {
         let mut instances = graphics::InstanceArray::new(ctx, image);
         instances.resize(ctx, (width * height) as u32 + 50); // mapsize + 50 entities
 
-        let mut map_layer = geom::Map::new(
-            width, height,
-            geom::Tile {
+        let mut map_layer = Map::new(
+            width,
+            height,
+            Tile {
                 block: false,
                 renderable: gfx::Renderable {
                     spr: sprite_set.src(14, 2),
@@ -42,7 +47,7 @@ impl MainState {
             Entity {
                 name: "Hero".to_string(),
                 physics: Physics {
-                    pos: vec2(10., 10.),
+                    pos: pt(10, 10),
                 },
                 renderable: gfx::Renderable {
                     spr: sprite_set.src(0, 4),
@@ -52,13 +57,13 @@ impl MainState {
                 player: true,
                 viewshed: Some(Viewshed {
                     visible_tiles: HashSet::new(),
-                    range: 5,
+                    range: 7,
                 }),
             },
             Entity {
                 name: "Giant Ant".to_string(),
                 physics: Physics {
-                    pos: vec2(20., 14.),
+                    pos: pt(20, 14),
                 },
                 renderable: gfx::Renderable {
                     spr: sprite_set.src(1, 6),
@@ -119,17 +124,18 @@ impl MainState {
         let viewshed = &self.entities[self.hero_id].viewshed;
         for x in 0..map_layer.width {
             for y in 0..map_layer.height {
+                let pos = pt(x as i32, y as i32);
                 let draw = if let Some(v) = viewshed {
-                    v.visible_tiles
-                        .contains(&geom::Point::new(x as i32, y as i32))
+                    v.visible_tiles.contains(&pos)
                 } else {
                     true
                 };
                 if draw {
                     let t = map_layer[(x, y)];
+                    let d: Vec2 = pos.into();
                     self.instances.push(
                         graphics::DrawParam::new()
-                            .dest(Vec2::new(x as f32 * 12., y as f32 * 12.))
+                            .dest(d * 12.)
                             .src(t.renderable.spr),
                     );
                 }
@@ -137,17 +143,16 @@ impl MainState {
         }
         self.entities.iter().for_each(|m| {
             let draw = if let Some(v) = viewshed {
-                v.visible_tiles.contains(&geom::Point::new(
-                    m.physics.pos.x as i32,
-                    m.physics.pos.y as i32,
-                ))
+                v.visible_tiles
+                    .contains(&Point::new(m.physics.pos.x as i32, m.physics.pos.y as i32))
             } else {
                 true
             };
             if draw {
+                let d: Vec2 = m.physics.pos.into();
                 self.instances.push(
                     graphics::DrawParam::new()
-                        .dest(m.physics.pos * 12.)
+                        .dest(d * 12.)
                         .src(m.renderable.spr)
                         .color(m.renderable.color),
                 );
@@ -173,29 +178,29 @@ impl MainState {
 
 fn handle_input(input: KeyInput, id: EntityId) -> Option<Action> {
     match input.keycode {
-        Some(KeyCode::Up) => Some(Action::Move(id, vec2(0., -1.))),
-        Some(KeyCode::Down) => Some(Action::Move(id, vec2(0., 1.))),
-        Some(KeyCode::Left) => Some(Action::Move(id, vec2(-1., 0.))),
-        Some(KeyCode::Right) => Some(Action::Move(id, vec2(1., 0.))),
+        Some(KeyCode::Up) => Some(Action::Move(id, pt(0, -1))),
+        Some(KeyCode::Down) => Some(Action::Move(id, pt(0, 1))),
+        Some(KeyCode::Left) => Some(Action::Move(id, pt(-1, 0))),
+        Some(KeyCode::Right) => Some(Action::Move(id, pt(1, 0))),
         Some(KeyCode::Period) => Some(Action::Rest(id)),
         _ => None,
     }
 }
 
 enum Action {
-    Move(EntityId, Vec2),
+    Move(EntityId, Point),
     Rest(EntityId),
     Attack(EntityId, EntityId),
     UpdateViewshed(EntityId),
 }
 
 fn ai_handler(id: EntityId, _ent: &Entity) -> Option<Action> {
-    Some(Action::Move(id, vec2(-1., 0.)))
+    Some(Action::Move(id, pt(-1, 0)))
 }
 
-fn move_handler(id: usize, entities: &mut Vec<Entity>, d: Vec2, m: &geom::Map) -> Option<Action> {
+fn move_handler(id: usize, entities: &mut Vec<Entity>, d: Point, m: &Map) -> Option<Action> {
     let n = entities[id].physics.pos + d;
-    let t = m[(n.x as i32, n.y as i32)];
+    let t = m[n.into()];
     if t.block {
         return None;
     }
@@ -220,8 +225,8 @@ fn attack_handler(id: EntityId, target: EntityId, entities: &Vec<Entity>) -> Opt
     None
 }
 
-fn fov_handler(id: usize, entities: &mut [Entity], m: &geom::Map) -> Option<Action> {
-    let opaque_at = |p: geom::Point| {
+fn fov_handler(id: usize, entities: &mut [Entity], m: &Map) -> Option<Action> {
+    let opaque_at = |p: Point| {
         if p.x >= 0 && p.x < m.width as i32 && p.y >= 0 && p.y < m.height as i32 {
             m[p.into()].block
         } else {
@@ -229,22 +234,17 @@ fn fov_handler(id: usize, entities: &mut [Entity], m: &geom::Map) -> Option<Acti
         }
     };
     if let Some(v) = &mut entities[id].viewshed {
-        let p = geom::Point::new(
-            entities[id].physics.pos.x as i32,
-            entities[id].physics.pos.y as i32,
-        );
-        v.visible_tiles = fov::calculate(p, v.range, opaque_at);
+        v.visible_tiles = fov::calculate(entities[id].physics.pos, v.range, opaque_at);
     }
     None
 }
 
 struct Physics {
-    pos: Vec2,
+    pos: Point,
 }
 
-
 struct Viewshed {
-    visible_tiles: HashSet<geom::Point>,
+    visible_tiles: HashSet<Point>,
     range: i32,
 }
 
@@ -256,4 +256,3 @@ struct Entity {
     player: bool,
     viewshed: Option<Viewshed>,
 }
-

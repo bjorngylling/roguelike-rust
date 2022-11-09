@@ -1,4 +1,5 @@
 use crate::gfx;
+use ggez::glam::Vec2;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct Point {
@@ -74,6 +75,12 @@ impl From<Point> for (i32, i32) {
     }
 }
 
+impl From<Point> for Vec2 {
+    fn from(p: Point) -> Vec2 {
+        Vec2::new(p.x as f32, p.y as f32)
+    }
+}
+
 pub fn pt(x: i32, y: i32) -> Point {
     Point::new(x, y)
 }
@@ -121,7 +128,6 @@ impl std::ops::IndexMut<(i32, i32)> for Map {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::map;
     use ggez::graphics;
 
     #[test]
@@ -129,7 +135,7 @@ mod test {
         let m = Map::new(
             10,
             10,
-            map::Tile {
+            Tile {
                 block: false,
                 renderable: gfx::Renderable {
                     spr: graphics::Rect::new(0.1, 0.1, 0., 0.),
