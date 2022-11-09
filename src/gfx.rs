@@ -105,6 +105,12 @@ pub const BACKGROUND: graphics::Color = graphics::Color {
     a: 1.,
 };
 
+#[derive(Copy, Clone)]
+pub struct Renderable {
+    pub spr: graphics::Rect,
+    pub color: graphics::Color,
+}
+
 // SpriteSet contains metadata about the tilesheet but not the actual image
 pub struct SpriteSet {
     cols: u32,

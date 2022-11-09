@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use crate::map::{Point, pt};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Angles {
@@ -26,55 +27,6 @@ impl Angles {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct Point {
-    pub x: i32,
-    pub y: i32,
-}
-
-impl Point {
-    pub fn new(x: i32, y: i32) -> Point {
-        Point { x, y }
-    }
-
-    pub fn distance(self, other: Self) -> f32 {
-        (self - other).length()
-    }
-
-    pub fn length(self) -> f32 {
-        f32::sqrt(self.dot(self) as f32)
-    }
-
-    pub fn dot(self, other: Self) -> i32 {
-        (self.x * other.x) + (self.y * other.y)
-    }
-}
-
-impl std::ops::Sub for Point {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self {
-            x: self.x - rhs.x,
-            y: self.y - rhs.y,
-        }
-    }
-}
-
-impl std::ops::Mul for Point {
-    type Output = Self;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        Self {
-            x: self.x * rhs.x,
-            y: self.y * rhs.y,
-        }
-    }
-}
-
-fn pt(x: i32, y: i32) -> Point {
-    Point::new(x, y)
-}
 
 fn at(center: Point, quad: Point, step: i32, it: i32, vert: bool) -> Point {
     if vert {

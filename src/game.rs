@@ -1,13 +1,12 @@
 use std::collections::HashSet;
 
-use crate::{fov, gfx};
+use crate::{fov, gfx, map};
 use ggez::glam::*;
 use ggez::{
     graphics,
     input::keyboard::{KeyCode, KeyInput},
     Context, GameResult,
 };
-use ndarray::Array2;
 
 type EntityId = usize;
 pub struct MainState {
@@ -15,29 +14,29 @@ pub struct MainState {
     sprite_set: gfx::SpriteSet,
     hero_id: EntityId,
     entities: Vec<Entity>,
-    map_layer: MapLayer,
+    map_layer: map::Map,
 }
 
 impl MainState {
-    pub fn new(ctx: &mut Context, width: u32, height: u32) -> GameResult<MainState> {
+    pub fn new(ctx: &mut Context, width: i32, height: i32) -> GameResult<MainState> {
         let sprite_set = gfx::SpriteSet::new(16, 16, 12, 12);
         let image = graphics::Image::from_path(ctx, "/nice-curses.png")?;
         let mut instances = graphics::InstanceArray::new(ctx, image);
-        instances.resize(ctx, (width * height) + 50); // mapsize + 50 entities
+        instances.resize(ctx, (width * height) as u32 + 50); // mapsize + 50 entities
 
-        let mut map_layer = MapLayer::from_elem(
-            (width as usize, height as usize),
-            Tile {
+        let mut map_layer = map::Map::new(
+            width, height,
+            map::Tile {
                 block: false,
-                renderable: Renderable {
+                renderable: gfx::Renderable {
                     spr: sprite_set.src(14, 2),
                     color: gfx::WHITE,
                 },
             },
         );
         for x in [0, 1, 2, 3, 5, 7, 9, 12, 13, 14] {
-            map_layer[[x as usize, 2]].renderable.spr = sprite_set.src(3, 2);
-            map_layer[[x as usize, 2]].block = true;
+            map_layer[(x, 2)].renderable.spr = sprite_set.src(3, 2);
+            map_layer[(x, 2)].block = true;
         }
         let entities = vec![
             Entity {
@@ -45,7 +44,7 @@ impl MainState {
                 physics: Physics {
                     pos: vec2(10., 10.),
                 },
-                renderable: Renderable {
+                renderable: gfx::Renderable {
                     spr: sprite_set.src(0, 4),
                     color: gfx::WHITE_BRIGHT,
                 },
@@ -61,7 +60,7 @@ impl MainState {
                 physics: Physics {
                     pos: vec2(20., 14.),
                 },
-                renderable: Renderable {
+                renderable: gfx::Renderable {
                     spr: sprite_set.src(1, 6),
                     color: gfx::BLUE_BRIGHT,
                 },
@@ -116,18 +115,18 @@ impl MainState {
 
     pub fn draw(&mut self, _ctx: &mut Context) -> &graphics::InstanceArray {
         self.instances.clear();
-        let map_layer = &self.map_layer.view();
+        let map_layer = &self.map_layer;
         let viewshed = &self.entities[self.hero_id].viewshed;
-        for x in 0..map_layer.nrows() {
-            for y in 0..map_layer.ncols() {
+        for x in 0..map_layer.width {
+            for y in 0..map_layer.height {
                 let draw = if let Some(v) = viewshed {
                     v.visible_tiles
-                        .contains(&fov::Point::new(x as i32, y as i32))
+                        .contains(&map::Point::new(x as i32, y as i32))
                 } else {
                     true
                 };
                 if draw {
-                    let t = map_layer[[x, y]];
+                    let t = map_layer[(x, y)];
                     self.instances.push(
                         graphics::DrawParam::new()
                             .dest(Vec2::new(x as f32 * 12., y as f32 * 12.))
@@ -138,7 +137,7 @@ impl MainState {
         }
         self.entities.iter().for_each(|m| {
             let draw = if let Some(v) = viewshed {
-                v.visible_tiles.contains(&fov::Point::new(
+                v.visible_tiles.contains(&map::Point::new(
                     m.physics.pos.x as i32,
                     m.physics.pos.y as i32,
                 ))
@@ -194,9 +193,9 @@ fn ai_handler(id: EntityId, _ent: &Entity) -> Option<Action> {
     Some(Action::Move(id, vec2(-1., 0.)))
 }
 
-fn move_handler(id: usize, entities: &mut Vec<Entity>, d: Vec2, m: &MapLayer) -> Option<Action> {
+fn move_handler(id: usize, entities: &mut Vec<Entity>, d: Vec2, m: &map::Map) -> Option<Action> {
     let n = entities[id].physics.pos + d;
-    let t = m[[n.x as usize, n.y as usize]];
+    let t = m[(n.x as i32, n.y as i32)];
     if t.block {
         return None;
     }
@@ -221,17 +220,16 @@ fn attack_handler(id: EntityId, target: EntityId, entities: &Vec<Entity>) -> Opt
     None
 }
 
-fn fov_handler(id: usize, entities: &mut [Entity], m: &MapLayer) -> Option<Action> {
-    let m = m.view();
-    let opaque_at = |p: fov::Point| {
-        if p.x >= 0 && p.x < m.ncols() as i32 && p.y >= 0 && p.y < m.nrows() as i32 {
-            m[[p.x as usize, p.y as usize]].block
+fn fov_handler(id: usize, entities: &mut [Entity], m: &map::Map) -> Option<Action> {
+    let opaque_at = |p: map::Point| {
+        if p.x >= 0 && p.x < m.width as i32 && p.y >= 0 && p.y < m.height as i32 {
+            m[p.into()].block
         } else {
             false
         }
     };
     if let Some(v) = &mut entities[id].viewshed {
-        let p = fov::Point::new(
+        let p = map::Point::new(
             entities[id].physics.pos.x as i32,
             entities[id].physics.pos.y as i32,
         );
@@ -244,14 +242,9 @@ struct Physics {
     pos: Vec2,
 }
 
-#[derive(Copy, Clone)]
-struct Renderable {
-    spr: graphics::Rect,
-    color: graphics::Color,
-}
 
 struct Viewshed {
-    visible_tiles: HashSet<fov::Point>,
+    visible_tiles: HashSet<map::Point>,
     range: i32,
 }
 
@@ -259,15 +252,8 @@ struct Entity {
     name: String,
     physics: Physics,
     next_action: Option<Action>,
-    renderable: Renderable,
+    renderable: gfx::Renderable,
     player: bool,
     viewshed: Option<Viewshed>,
 }
 
-type MapLayer = Array2<Tile>;
-
-#[derive(Copy, Clone)]
-struct Tile {
-    renderable: Renderable,
-    block: bool,
-}

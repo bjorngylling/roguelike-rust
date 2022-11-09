@@ -9,9 +9,10 @@ use ggez::{
 mod game;
 mod gfx;
 mod fov;
+mod map;
 
-const SCREEN_WIDTH_TILES: u32 = 60;
-const SCREEN_HEIGHT_TILES: u32 = 35;
+const SCREEN_WIDTH_TILES: i32 = 60;
+const SCREEN_HEIGHT_TILES: i32 = 35;
 
 struct App {
     game: game::MainState,
