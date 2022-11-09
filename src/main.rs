@@ -6,10 +6,10 @@ use ggez::{
     timer, Context, GameResult,
 };
 
-mod game;
-mod gfx;
 mod fov;
+mod game;
 mod geom;
+mod gfx;
 
 const SCREEN_WIDTH_TILES: i32 = 60;
 const SCREEN_HEIGHT_TILES: i32 = 35;

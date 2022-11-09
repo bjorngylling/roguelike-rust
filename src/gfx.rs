@@ -182,18 +182,9 @@ mod tests {
     #[test]
     fn spriteset_src_by_idx() {
         let t = SpriteSet::new(4, 4, 10, 10);
-        assert_eq!(
-            t.src_by_idx(0),
-            graphics::Rect::new(0., 0., 0.25, 0.25)
-        );
-        assert_eq!(
-            t.src_by_idx(3),
-            graphics::Rect::new(0.75, 0., 0.25, 0.25)
-        );
-        assert_eq!(
-            t.src_by_idx(4),
-            graphics::Rect::new(0., 0.25, 0.25, 0.25)
-        );
+        assert_eq!(t.src_by_idx(0), graphics::Rect::new(0., 0., 0.25, 0.25));
+        assert_eq!(t.src_by_idx(3), graphics::Rect::new(0.75, 0., 0.25, 0.25));
+        assert_eq!(t.src_by_idx(4), graphics::Rect::new(0., 0.25, 0.25, 0.25));
     }
 
     #[test]

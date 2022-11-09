@@ -46,9 +46,7 @@ impl MainState {
         let entities = vec![
             Entity {
                 name: "Hero".to_string(),
-                physics: Physics {
-                    pos: pt(10, 10),
-                },
+                physics: Physics { pos: pt(10, 10) },
                 renderable: gfx::Renderable {
                     spr: sprite_set.src(0, 4),
                     color: gfx::WHITE_BRIGHT,
@@ -62,9 +60,7 @@ impl MainState {
             },
             Entity {
                 name: "Giant Ant".to_string(),
-                physics: Physics {
-                    pos: pt(20, 14),
-                },
+                physics: Physics { pos: pt(20, 14) },
                 renderable: gfx::Renderable {
                     spr: sprite_set.src(1, 6),
                     color: gfx::BLUE_BRIGHT,
@@ -262,4 +258,3 @@ pub struct Tile {
     pub renderable: gfx::Renderable,
     pub block: bool,
 }
-

@@ -1,5 +1,5 @@
+use crate::geom::{pt, Point};
 use std::collections::HashSet;
-use crate::geom::{Point, pt};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Angles {
@@ -26,7 +26,6 @@ impl Angles {
         return self.start < angle && angle < self.end;
     }
 }
-
 
 fn at(center: Point, quad: Point, step: i32, it: i32, vert: bool) -> Point {
     if vert {
@@ -213,5 +212,3 @@ mod test {
         );
     }
 }
-
-
