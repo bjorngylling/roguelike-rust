@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::{
     fov,
-    geom::{pt, Map, Point},
+    geom::{pt, Grid, Point},
     gfx,
 };
 use ggez::glam::*;
@@ -18,7 +18,7 @@ pub struct MainState {
     sprite_set: gfx::SpriteSet,
     hero_id: EntityId,
     entities: Vec<Entity>,
-    map_layer: Map<Tile>,
+    map_layer: Grid<Tile>,
 }
 
 impl MainState {
@@ -28,7 +28,7 @@ impl MainState {
         let mut instances = graphics::InstanceArray::new(ctx, image);
         instances.resize(ctx, (width * height) as u32 + 50); // mapsize + 50 entities
 
-        let mut map_layer = Map::new(
+        let mut map_layer = Grid::new(
             width,
             height,
             Tile {
@@ -194,7 +194,7 @@ fn ai_handler(id: EntityId, _ent: &Entity) -> Option<Action> {
     Some(Action::Move(id, pt(-1, 0)))
 }
 
-fn move_handler(id: usize, entities: &mut [Entity], d: Point, m: &Map<Tile>) -> Option<Action> {
+fn move_handler(id: usize, entities: &mut [Entity], d: Point, m: &Grid<Tile>) -> Option<Action> {
     let n = entities[id].physics.pos + d;
     let t = m[n.into()];
     if t.block {
@@ -221,7 +221,7 @@ fn attack_handler(id: EntityId, target: EntityId, entities: &[Entity]) -> Option
     None
 }
 
-fn fov_handler(id: usize, entities: &mut [Entity], m: &Map<Tile>) -> Option<Action> {
+fn fov_handler(id: usize, entities: &mut [Entity], m: &Grid<Tile>) -> Option<Action> {
     let opaque_at = |p: Point| {
         if p.x >= 0 && p.x < m.width as i32 && p.y >= 0 && p.y < m.height as i32 {
             m[p.into()].block

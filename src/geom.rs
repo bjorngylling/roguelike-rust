@@ -85,15 +85,15 @@ pub fn pt(x: i32, y: i32) -> Point {
     Point::new(x, y)
 }
 
-pub struct Map<T> {
+pub struct Grid<T> {
     pub width: i32,
     pub height: i32,
     storage: Vec<T>,
 }
 
-impl<T: std::clone::Clone> Map<T> {
+impl<T: std::clone::Clone> Grid<T> {
     pub fn new(width: i32, height: i32, fill: T) -> Self {
-        Map {
+        Grid {
             width,
             height,
             storage: vec![fill; (width * height) as usize],
@@ -105,7 +105,7 @@ impl<T: std::clone::Clone> Map<T> {
     }
 }
 
-impl<T: std::clone::Clone> std::ops::Index<(i32, i32)> for Map<T> {
+impl<T: std::clone::Clone> std::ops::Index<(i32, i32)> for Grid<T> {
     type Output = T;
 
     fn index(&self, index: (i32, i32)) -> &Self::Output {
@@ -113,7 +113,7 @@ impl<T: std::clone::Clone> std::ops::Index<(i32, i32)> for Map<T> {
     }
 }
 
-impl<T: std::clone::Clone> std::ops::IndexMut<(i32, i32)> for Map<T> {
+impl<T: std::clone::Clone> std::ops::IndexMut<(i32, i32)> for Grid<T> {
     fn index_mut(&mut self, index: (i32, i32)) -> &mut T {
         self.storage.index_mut(self.idx(index) as usize)
     }
@@ -126,7 +126,7 @@ mod test {
     #[test]
     fn map_access_by_point() {
         let m = {
-            let mut m = Map::new(10, 10, false);
+            let mut m = Grid::new(10, 10, false);
             m[(0, 1)] = true;
             m
         };
