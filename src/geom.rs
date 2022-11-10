@@ -85,12 +85,6 @@ pub fn pt(x: i32, y: i32) -> Point {
     Point::new(x, y)
 }
 
-#[derive(Copy, Clone)]
-pub struct Tile {
-    pub renderable: gfx::Renderable,
-    pub block: bool,
-}
-
 pub struct Map<T> {
     pub width: i32,
     pub height: i32,
