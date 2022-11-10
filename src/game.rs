@@ -28,27 +28,16 @@ impl MainState {
         let mut instances = graphics::InstanceArray::new(ctx, image);
         instances.resize(ctx, (width * height) as u32 + 50); // mapsize + 50 entities
 
-        let mut map_layer = Grid::new(
-            width,
-            height,
-            Tile {
-                block: false,
-                renderable: gfx::Renderable {
-                    spr: sprite_set.src(14, 2),
-                    color: gfx::WHITE,
-                },
-            },
-        );
+        let mut map_layer = Grid::new(width, height, Tile::Floor);
         for x in [0, 1, 2, 3, 5, 7, 9, 12, 13, 14] {
-            map_layer[(x, 2)].renderable.spr = sprite_set.src(3, 2);
-            map_layer[(x, 2)].block = true;
+            map_layer[(x, 2)] = Tile::Wall;
         }
         let entities = vec![
             Entity {
                 name: "Hero".to_string(),
                 physics: Physics { pos: pt(10, 10) },
                 renderable: gfx::Renderable {
-                    spr: sprite_set.src(0, 4),
+                    spr: sprite_set.src_by_idx(gfx::CP437::ChAt as i32),
                     color: gfx::WHITE_BRIGHT,
                 },
                 next_action: Some(Action::UpdateViewshed(0)), // queue a viewshed update
@@ -62,7 +51,7 @@ impl MainState {
                 name: "Giant Ant".to_string(),
                 physics: Physics { pos: pt(20, 14) },
                 renderable: gfx::Renderable {
-                    spr: sprite_set.src(1, 6),
+                    spr: sprite_set.src_by_idx(gfx::CP437::Cha as i32),
                     color: gfx::BLUE_BRIGHT,
                 },
                 next_action: None,
@@ -129,11 +118,13 @@ impl MainState {
                 if draw {
                     let t = map_layer[(x, y)];
                     let d: Vec2 = pos.into();
-                    self.instances.push(
-                        graphics::DrawParam::new()
-                            .dest(d * 12.)
-                            .src(t.renderable.spr),
-                    );
+                    let spr = if t == Tile::Floor {
+                        self.sprite_set.src_by_idx(gfx::CP437::ChDot as i32)
+                    } else {
+                        self.sprite_set.src_by_idx(gfx::CP437::Pillar as i32)
+                    };
+                    self.instances
+                        .push(graphics::DrawParam::new().dest(d * 12.).src(spr));
                 }
             }
         }
@@ -197,7 +188,7 @@ fn ai_handler(id: EntityId, _ent: &Entity) -> Option<Action> {
 fn move_handler(id: usize, entities: &mut [Entity], d: Point, m: &Grid<Tile>) -> Option<Action> {
     let n = entities[id].physics.pos + d;
     let t = m[n.into()];
-    if t.block {
+    if t == Tile::Wall {
         return None;
     }
     if let Some(other) = entities.iter().position(|e| e.physics.pos == n) {
@@ -224,7 +215,7 @@ fn attack_handler(id: EntityId, target: EntityId, entities: &[Entity]) -> Option
 fn fov_handler(id: usize, entities: &mut [Entity], m: &Grid<Tile>) -> Option<Action> {
     let opaque_at = |p: Point| {
         if p.x >= 0 && p.x < m.width as i32 && p.y >= 0 && p.y < m.height as i32 {
-            m[p.into()].block
+            m[p.into()] == Tile::Wall
         } else {
             false
         }
@@ -253,8 +244,8 @@ struct Entity {
     viewshed: Option<Viewshed>,
 }
 
-#[derive(Copy, Clone)]
-pub struct Tile {
-    pub renderable: gfx::Renderable,
-    pub block: bool,
+#[derive(Copy, Clone, PartialEq)]
+enum Tile {
+    Wall,
+    Floor,
 }

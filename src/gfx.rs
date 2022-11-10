@@ -106,6 +106,16 @@ pub const BACKGROUND: graphics::Color = graphics::Color {
 };
 
 #[derive(Copy, Clone)]
+pub enum CP437 {
+    Pillar = 35,
+    ChDot = 46,
+    ChAt = 64,
+    ChA = 65,
+    Cha = 97,
+    Filled = 219,
+}
+
+#[derive(Copy, Clone)]
 pub struct Renderable {
     pub spr: graphics::Rect,
     pub color: graphics::Color,
@@ -113,14 +123,14 @@ pub struct Renderable {
 
 // SpriteSet contains metadata about the tilesheet but not the actual image
 pub struct SpriteSet {
-    cols: u32,
-    rows: u32,
+    cols: i32,
+    rows: i32,
     tile_width: f32,
     tile_height: f32,
 }
 
 impl SpriteSet {
-    pub fn new(cols: u32, rows: u32, tile_width: u32, tile_height: u32) -> SpriteSet {
+    pub fn new(cols: i32, rows: i32, tile_width: i32, tile_height: i32) -> SpriteSet {
         let wf = tile_width as f32;
         let hf = tile_height as f32;
         let w = wf / (cols as f32 * wf);
@@ -133,7 +143,7 @@ impl SpriteSet {
         }
     }
 
-    pub fn src_by_idx(&self, idx: u32) -> graphics::Rect {
+    pub fn src_by_idx(&self, idx: i32) -> graphics::Rect {
         if idx >= self.rows * self.cols {
             panic!("accessing sprite by idx outside sheet bounds at {}", idx)
         } else {
@@ -146,7 +156,7 @@ impl SpriteSet {
         }
     }
 
-    pub fn src(&self, x: u32, y: u32) -> graphics::Rect {
+    pub fn src(&self, x: i32, y: i32) -> graphics::Rect {
         if x >= self.rows || y >= self.cols {
             panic!("accessing sprite outside sheet bounds at {},{}", x, y)
         } else {
