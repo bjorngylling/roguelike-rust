@@ -12,12 +12,6 @@ struct Angles {
 }
 
 impl Angles {
-    const ZERO: Angles = Angles {
-        start: 0.,
-        center: 0.,
-        end: 0.,
-    };
-
     fn new(start: f32, center: f32, end: f32) -> Angles {
         Angles { start, center, end }
     }
@@ -67,7 +61,7 @@ where
         let angle_range = 1. / (it + 1) as f32;
         for stp in 0..(it + 1) {
             let p = at(center, quad_dir, stp, it, vert);
-            if center.distance(p) <= (radius as f32) + 1. / 3. {
+            if center.to_f32().distance_to(p.to_f32()) <= (radius as f32) + 1. / 3. {
                 let f_stp = stp as f32;
                 let angles = Angles::new(
                     f_stp * angle_range,

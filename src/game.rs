@@ -91,9 +91,7 @@ impl MainState {
                             Move(id, d) => move_handler(id, &mut self.entities, d, &self.map_layer),
                             Rest(_) => None,
                             Attack(id, target) => attack_handler(id, target, &self.entities),
-                            UpdateViewshed(id) => {
-                                fov_handler(id, &mut self.entities, &self.map_layer)
-                            }
+                            UpdateViewshed(id) => fov_handler(id, &mut self.entities, &self.map_layer)
                         }
                     }
                 }
@@ -117,7 +115,7 @@ impl MainState {
                 };
                 if draw {
                     let t = map_layer[(x, y)];
-                    let d: Vec2 = pos.into();
+                    let d: Vec2 = pos.to_f32().to_array().into();
                     let spr = if t == Tile::Floor {
                         self.sprite_set.src_by_idx(gfx::CP437::ChDot as i32)
                     } else {
@@ -136,7 +134,7 @@ impl MainState {
                 true
             };
             if draw {
-                let d: Vec2 = m.physics.pos.into();
+                let d: Vec2 = m.physics.pos.to_f32().to_array().into();
                 self.instances.push(
                     graphics::DrawParam::new()
                         .dest(d * 12.)
@@ -186,9 +184,9 @@ fn ai_handler(id: EntityId, _ent: &Entity) -> Option<Action> {
 }
 
 fn move_handler(id: usize, entities: &mut [Entity], d: Point, m: &Grid<Tile>) -> Option<Action> {
-    let n = entities[id].physics.pos + d;
-    let t = m[n.into()];
-    if t == Tile::Wall {
+    let n = entities[id].physics.pos + d.to_vector();
+    let t = m[n];
+    if t.blocked() {
         return None;
     }
     if let Some(other) = entities.iter().position(|e| e.physics.pos == n) {
@@ -215,7 +213,7 @@ fn attack_handler(id: EntityId, target: EntityId, entities: &[Entity]) -> Option
 fn fov_handler(id: usize, entities: &mut [Entity], m: &Grid<Tile>) -> Option<Action> {
     let opaque_at = |p: Point| {
         if p.x >= 0 && p.x < m.width as i32 && p.y >= 0 && p.y < m.height as i32 {
-            m[p.into()] == Tile::Wall
+            m[p].opaque()
         } else {
             false
         }
@@ -248,4 +246,20 @@ struct Entity {
 enum Tile {
     Wall,
     Floor,
+}
+
+impl Tile {
+    fn blocked(&self) -> bool {
+        match self {
+            Tile::Wall => true,
+            _ => false,
+        }
+    }
+
+    fn opaque(&self) -> bool {
+        match self {
+            Tile::Wall => true,
+            _ => false,
+        }
+    }
 }

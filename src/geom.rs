@@ -1,91 +1,11 @@
-use crate::gfx;
-use ggez::glam::Vec2;
+use euclid::{point2, Point2D};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct Point {
-    pub x: i32,
-    pub y: i32,
-}
-
-impl Point {
-    pub fn new(x: i32, y: i32) -> Point {
-        Point { x, y }
-    }
-
-    pub fn distance(self, other: Self) -> f32 {
-        (self - other).length()
-    }
-
-    pub fn length(self) -> f32 {
-        f32::sqrt(self.dot(self) as f32)
-    }
-
-    pub fn dot(self, other: Self) -> i32 {
-        (self.x * other.x) + (self.y * other.y)
-    }
-}
-
-impl std::ops::Sub for Point {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self {
-            x: self.x - rhs.x,
-            y: self.y - rhs.y,
-        }
-    }
-}
-
-impl std::ops::Add for Point {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            x: self.x + rhs.x,
-            y: self.y + rhs.y,
-        }
-    }
-}
-
-impl std::ops::Mul for Point {
-    type Output = Self;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        Self {
-            x: self.x * rhs.x,
-            y: self.y * rhs.y,
-        }
-    }
-}
-
-impl std::ops::Div for Point {
-    type Output = Self;
-
-    fn div(self, rhs: Self) -> Self::Output {
-        Self {
-            x: self.x / rhs.x,
-            y: self.y / rhs.y,
-        }
-    }
-}
-
-impl From<Point> for (i32, i32) {
-    fn from(p: Point) -> (i32, i32) {
-        (p.x, p.y)
-    }
-}
-
-impl From<Point> for Vec2 {
-    fn from(p: Point) -> Vec2 {
-        Vec2::new(p.x as f32, p.y as f32)
-    }
-}
-
+pub type Point = Point2D<i32, i32>;
 pub fn pt(x: i32, y: i32) -> Point {
-    Point::new(x, y)
+    point2(x, y)
 }
 
-pub struct Grid<T> {
+pub struct Grid<T: std::clone::Clone> {
     pub width: i32,
     pub height: i32,
     storage: Vec<T>,
@@ -119,6 +39,20 @@ impl<T: std::clone::Clone> std::ops::IndexMut<(i32, i32)> for Grid<T> {
     }
 }
 
+impl<T: std::clone::Clone> std::ops::Index<Point2D<i32, i32>> for Grid<T> {
+    type Output = T;
+
+    fn index(&self, p: Point2D<i32, i32>) -> &Self::Output {
+        self.storage.index(self.idx((p.x, p.y)) as usize)
+    }
+}
+
+impl<T: std::clone::Clone> std::ops::IndexMut<Point> for Grid<T> {
+    fn index_mut(&mut self, p: Point) -> &mut T {
+        self.storage.index_mut(self.idx((p.x, p.y)) as usize)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -130,6 +64,6 @@ mod test {
             m[(0, 1)] = true;
             m
         };
-        assert!(m[pt(0, 1).into()]);
+        assert!(m[point2(0, 1)]);
     }
 }
