@@ -22,16 +22,12 @@ pub struct MainState {
 }
 
 impl MainState {
-    pub fn new(ctx: &mut Context, width: i32, height: i32) -> GameResult<MainState> {
+    pub fn new(ctx: &mut Context, width: i32, height: i32, map_layer: Grid<Tile>) -> GameResult<MainState> {
         let sprite_set = gfx::SpriteSet::new(16, 16, 12, 12);
         let image = graphics::Image::from_path(ctx, "/nice-curses.png")?;
         let mut instances = graphics::InstanceArray::new(ctx, image);
         instances.resize(ctx, (width * height) as u32 + 50); // mapsize + 50 entities
 
-        let mut map_layer = Grid::new(width, height, Tile::Floor);
-        for x in [0, 1, 2, 3, 5, 7, 9, 12, 13, 14] {
-            map_layer[(x, 2)] = Tile::Wall;
-        }
         let entities = vec![
             Entity {
                 name: "Hero".to_string(),
@@ -243,7 +239,7 @@ struct Entity {
 }
 
 #[derive(Copy, Clone, PartialEq)]
-enum Tile {
+pub enum Tile {
     Wall,
     Floor,
 }

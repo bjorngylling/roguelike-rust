@@ -5,23 +5,34 @@ use ggez::{
     input::keyboard::{KeyCode, KeyInput},
     timer, Context, GameResult,
 };
+use mapgen::Generator;
 
 mod fov;
 mod game;
 mod geom;
 mod gfx;
+mod mapgen;
 
 const SCREEN_WIDTH_TILES: i32 = 60;
 const SCREEN_HEIGHT_TILES: i32 = 35;
 
 struct App {
     game: game::MainState,
+    map_gen_active: bool,
+    map_gen_history: Vec<image::RgbaImage>,
 }
 
 impl App {
     fn new(ctx: &mut Context) -> GameResult<App> {
-        match game::MainState::new(ctx, SCREEN_WIDTH_TILES, SCREEN_HEIGHT_TILES) {
-            Ok(game) => Ok(App { game }),
+        let mut map_gen_visualizer =
+            mapgen::SimpleMapGenerator::new(SCREEN_WIDTH_TILES, SCREEN_WIDTH_TILES);
+        let m = map_gen_visualizer.generate();
+        match game::MainState::new(ctx, SCREEN_WIDTH_TILES, SCREEN_HEIGHT_TILES, m) {
+            Ok(game) => Ok(App {
+                game,
+                map_gen_active: true,
+                map_gen_history: map_gen_visualizer.timeline(),
+            }),
             Err(e) => Err(e),
         }
     }
@@ -38,26 +49,46 @@ impl event::EventHandler<ggez::GameError> for App {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let game_view = self.game.draw(ctx);
-
         let mut canvas = graphics::Canvas::from_frame(ctx, gfx::BACKGROUND);
 
         // Currently broken, https://github.com/ggez/ggez/issues/1127
         canvas.set_sampler(graphics::Sampler::nearest_clamp());
 
-        let scale = Vec2::splat(
-            (canvas.scissor_rect().w / (SCREEN_WIDTH_TILES as f32 * 12.))
-                .min(canvas.scissor_rect().h / (SCREEN_HEIGHT_TILES as f32 * 12.)),
-        );
-        canvas.draw(
-            game_view,
-            graphics::DrawParam::new()
-                .dest(Vec2::new(
-                    (canvas.scissor_rect().w - (SCREEN_WIDTH_TILES as f32 * 12.) * scale.x) / 2.,
-                    (canvas.scissor_rect().h - (SCREEN_HEIGHT_TILES as f32 * 12.) * scale.y) / 2.,
-                ))
-                .scale(scale),
-        );
+        if self.map_gen_active {
+            let img = graphics::Image::from_pixels(
+                ctx,
+                &self.map_gen_history[0],
+                graphics::ImageFormat::Rgba8UnormSrgb,
+                SCREEN_WIDTH_TILES as u32,
+                SCREEN_HEIGHT_TILES as u32,
+            );
+            let scale = Vec2::splat(
+                (canvas.scissor_rect().w / (SCREEN_WIDTH_TILES as f32))
+                    .min(canvas.scissor_rect().h / (SCREEN_HEIGHT_TILES as f32)),
+            );
+            canvas.draw(
+                &img,
+                graphics::DrawParam::new()
+                    .scale(scale),
+            );
+        } else {
+            let game_view = self.game.draw(ctx);
+            let scale = Vec2::splat(
+                (canvas.scissor_rect().w / (SCREEN_WIDTH_TILES as f32 * 12.))
+                    .min(canvas.scissor_rect().h / (SCREEN_HEIGHT_TILES as f32 * 12.)),
+            );
+            canvas.draw(
+                game_view,
+                graphics::DrawParam::new()
+                    .dest(Vec2::new(
+                        (canvas.scissor_rect().w - (SCREEN_WIDTH_TILES as f32 * 12.) * scale.x)
+                            / 2.,
+                        (canvas.scissor_rect().h - (SCREEN_HEIGHT_TILES as f32 * 12.) * scale.y)
+                            / 2.,
+                    ))
+                    .scale(scale),
+            );
+        }
 
         canvas.finish(ctx)
     }
@@ -65,7 +96,11 @@ impl event::EventHandler<ggez::GameError> for App {
     fn key_down_event(&mut self, ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
         match input.keycode {
             Some(KeyCode::Escape) => {
-                ctx.request_quit();
+                if self.map_gen_active {
+                    self.map_gen_active = false;
+                } else {
+                    ctx.request_quit();
+                }
                 Ok(())
             }
             _ => self.game.key_down_event(ctx, input, _repeat),

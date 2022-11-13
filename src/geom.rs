@@ -5,6 +5,7 @@ pub fn pt(x: i32, y: i32) -> Point {
     point2(x, y)
 }
 
+#[derive(Clone)]
 pub struct Grid<T: std::clone::Clone> {
     pub width: i32,
     pub height: i32,
