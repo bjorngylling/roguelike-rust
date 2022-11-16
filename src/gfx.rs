@@ -109,6 +109,8 @@ pub const BACKGROUND: graphics::Color = graphics::Color {
 pub enum CP437 {
     Pillar = 35,
     ChDot = 46,
+    LessThan = 60,
+    GreaterThan = 62,
     ChAt = 64,
     ChA = 65,
     Cha = 97,

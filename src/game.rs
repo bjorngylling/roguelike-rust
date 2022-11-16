@@ -22,16 +22,30 @@ pub struct MainState {
 }
 
 impl MainState {
-    pub fn new(ctx: &mut Context, width: i32, height: i32, map_layer: Grid<Tile>) -> GameResult<MainState> {
+    pub fn new(
+        ctx: &mut Context,
+        width: i32,
+        height: i32,
+        map_layer: Grid<Tile>,
+    ) -> GameResult<MainState> {
         let sprite_set = gfx::SpriteSet::new(16, 16, 12, 12);
         let image = graphics::Image::from_path(ctx, "/nice-curses.png")?;
         let mut instances = graphics::InstanceArray::new(ctx, image);
         instances.resize(ctx, (width * height) as u32 + 50); // mapsize + 50 entities
 
+        let mut hero_pos = pt(10, 10);
+        for x in 0..map_layer.width {
+            for y in 0..map_layer.height {
+                if map_layer[(x, y)] == Tile::StairUp {
+                    hero_pos.x = x;
+                    hero_pos.y = y;
+                }
+            }
+        }
         let entities = vec![
             Entity {
                 name: "Hero".to_string(),
-                physics: Physics { pos: pt(10, 10) },
+                physics: Physics { pos: hero_pos },
                 renderable: gfx::Renderable {
                     spr: sprite_set.src_by_idx(gfx::CP437::ChAt as i32),
                     color: gfx::WHITE_BRIGHT,
@@ -112,10 +126,10 @@ impl MainState {
                 if draw {
                     let t = map_layer[(x, y)];
                     let d: Vec2 = pos.to_f32().to_array().into();
-                    let spr = if t == Tile::Floor {
-                        self.sprite_set.src_by_idx(gfx::CP437::ChDot as i32)
-                    } else {
-                        self.sprite_set.src_by_idx(gfx::CP437::Pillar as i32)
+                    let spr = match t {
+                        Tile::Floor => self.sprite_set.src_by_idx(gfx::CP437::ChDot as i32),
+                        Tile::StairUp => self.sprite_set.src_by_idx(gfx::CP437::LessThan as i32),
+                        _ => self.sprite_set.src_by_idx(gfx::CP437::Pillar as i32),
                     };
                     self.instances
                         .push(graphics::DrawParam::new().dest(d * 12.).src(spr));
@@ -242,6 +256,7 @@ struct Entity {
 pub enum Tile {
     Wall,
     Floor,
+    StairUp,
 }
 
 impl Tile {

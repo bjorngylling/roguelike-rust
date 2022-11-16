@@ -6,6 +6,7 @@ use ggez::{
     timer, Context, GameResult,
 };
 use mapgen::Generator;
+use rand_seeder::{Seeder, SipRng};
 
 mod fov;
 mod game;
@@ -20,18 +21,21 @@ struct App {
     game: game::MainState,
     map_gen_active: bool,
     map_gen_history: Vec<image::RgbaImage>,
+    map_gen_history_cur: usize,
 }
 
 impl App {
     fn new(ctx: &mut Context) -> GameResult<App> {
+        let mut rng: SipRng = Seeder::from("helloworld").make_rng();
         let mut map_gen_visualizer =
-            mapgen::SimpleMapGenerator::new(SCREEN_WIDTH_TILES, SCREEN_WIDTH_TILES);
-        let m = map_gen_visualizer.generate();
+            mapgen::SimpleMapGenerator::new(SCREEN_WIDTH_TILES, SCREEN_HEIGHT_TILES);
+        let m = map_gen_visualizer.generate(&mut rng);
         match game::MainState::new(ctx, SCREEN_WIDTH_TILES, SCREEN_HEIGHT_TILES, m) {
             Ok(game) => Ok(App {
                 game,
                 map_gen_active: true,
                 map_gen_history: map_gen_visualizer.timeline(),
+                map_gen_history_cur: 0,
             }),
             Err(e) => Err(e),
         }
@@ -57,7 +61,7 @@ impl event::EventHandler<ggez::GameError> for App {
         if self.map_gen_active {
             let img = graphics::Image::from_pixels(
                 ctx,
-                &self.map_gen_history[0],
+                &self.map_gen_history[self.map_gen_history_cur],
                 graphics::ImageFormat::Rgba8UnormSrgb,
                 SCREEN_WIDTH_TILES as u32,
                 SCREEN_HEIGHT_TILES as u32,
@@ -66,11 +70,7 @@ impl event::EventHandler<ggez::GameError> for App {
                 (canvas.scissor_rect().w / (SCREEN_WIDTH_TILES as f32))
                     .min(canvas.scissor_rect().h / (SCREEN_HEIGHT_TILES as f32)),
             );
-            canvas.draw(
-                &img,
-                graphics::DrawParam::new()
-                    .scale(scale),
-            );
+            canvas.draw(&img, graphics::DrawParam::new().scale(scale));
         } else {
             let game_view = self.game.draw(ctx);
             let scale = Vec2::splat(
@@ -102,6 +102,26 @@ impl event::EventHandler<ggez::GameError> for App {
                     ctx.request_quit();
                 }
                 Ok(())
+            }
+            Some(KeyCode::Right) => {
+                if self.map_gen_active {
+                    if self.map_gen_history_cur < self.map_gen_history.len() - 1 {
+                        self.map_gen_history_cur += 1;
+                    }
+                    Ok(())
+                } else {
+                    self.game.key_down_event(ctx, input, _repeat)
+                }
+            }
+            Some(KeyCode::Left) => {
+                if self.map_gen_active {
+                    if self.map_gen_history_cur > 0 {
+                        self.map_gen_history_cur -= 1;
+                    }
+                    Ok(())
+                } else {
+                    self.game.key_down_event(ctx, input, _repeat)
+                }
             }
             _ => self.game.key_down_event(ctx, input, _repeat),
         }
