@@ -83,7 +83,7 @@ impl MainState {
         }
         move_handler(&mut self.world, &self.map.tiles);
         fov_handler(&mut self.world, &self.map.tiles);
-        
+
         // Clear input
         self.input.key = None;
         self.input.mods = None;
@@ -161,7 +161,6 @@ impl MainState {
 }
 
 fn input_handler(world: &mut hecs::World, hero: hecs::Entity, input: &KeyState) -> bool {
-
     match input.key {
         Some(KeyCode::Up) => world.insert_one(hero, pt(0, -1) as Move),
         Some(KeyCode::Down) => world.insert_one(hero, pt(0, 1) as Move),
