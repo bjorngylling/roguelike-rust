@@ -6,7 +6,7 @@ use crate::{
 use ggez::{
     glam::*,
     graphics,
-    input::keyboard::{KeyCode, KeyInput},
+    input::keyboard::{KeyCode, KeyInput, KeyMods},
     Context, GameResult,
 };
 use hecs;
@@ -18,6 +18,7 @@ pub struct MainState {
     instances: ggez::graphics::InstanceArray,
     sprite_set: gfx::SpriteSet,
     map: Map,
+    input: KeyState,
 }
 
 impl MainState {
@@ -58,6 +59,7 @@ impl MainState {
         ));
         world.spawn((
             Name("Giant Ant".to_string()),
+            AI,
             Physics { pos: pt(20, 14) },
             gfx::Renderable {
                 spr: sprite_set.src_by_idx(gfx::CP437::Cha as i32),
@@ -65,6 +67,7 @@ impl MainState {
             },
         ));
         Ok(MainState {
+            input: KeyState::default(),
             world,
             hero,
             instances,
@@ -74,8 +77,16 @@ impl MainState {
     }
 
     pub fn update(&mut self) -> GameResult {
+        if input_handler(&mut self.world, self.hero, &self.input) {
+            // Monsters only act when the player acts
+            ai_handler(&mut self.world, &self.map.tiles);
+        }
         move_handler(&mut self.world, &self.map.tiles);
         fov_handler(&mut self.world, &self.map.tiles);
+        
+        // Clear input
+        self.input.key = None;
+        self.input.mods = None;
 
         Ok(())
     }
@@ -134,33 +145,52 @@ impl MainState {
         &mut self,
         ctx: &mut Context,
         input: KeyInput,
-        _repeat: bool,
+        repeat: bool,
     ) -> GameResult {
+        {
+            self.input.key = input.keycode;
+            self.input.mods = Some(input.mods);
+            self.input.repeat = repeat;
+        }
         match input.keycode {
             Some(KeyCode::Escape) => ctx.request_quit(),
-            _ => {
-                if let Some(action) = handle_input(input) {
-                    self.world.insert_one(self.hero, action);
-                }
-                ()
-            }
+            _ => (),
         };
         Ok(())
     }
 }
 
-fn handle_input(input: KeyInput) -> Option<Move> {
-    match input.keycode {
-        Some(KeyCode::Up) => Some(pt(0, -1)),
-        Some(KeyCode::Down) => Some(pt(0, 1)),
-        Some(KeyCode::Left) => Some(pt(-1, 0)),
-        Some(KeyCode::Right) => Some(pt(1, 0)),
-        //Some(KeyCode::Period) => Some(Action::Rest()),
-        _ => None,
-    }
+fn input_handler(world: &mut hecs::World, hero: hecs::Entity, input: &KeyState) -> bool {
+
+    match input.key {
+        Some(KeyCode::Up) => world.insert_one(hero, pt(0, -1) as Move),
+        Some(KeyCode::Down) => world.insert_one(hero, pt(0, 1) as Move),
+        Some(KeyCode::Left) => world.insert_one(hero, pt(-1, 0) as Move),
+        Some(KeyCode::Right) => world.insert_one(hero, pt(1, 0) as Move),
+        Some(KeyCode::Period) => Ok(()),
+        _ => return false,
+    };
+    true
 }
 
-fn ai_handler(world: &mut hecs::World, m: &Grid<Tile>) {}
+#[derive(Debug, Default)]
+pub struct KeyState {
+    pub key: Option<KeyCode>,
+    pub mods: Option<KeyMods>,
+    pub repeat: bool,
+}
+
+fn ai_handler(world: &mut hecs::World, _m: &Grid<Tile>) {
+    let moves: Vec<_> = world
+        .query::<()>()
+        .with::<&AI>()
+        .iter()
+        .map(|(e, _)| (e, pt(-1, 0) as Move))
+        .collect();
+    for (e, mv) in moves {
+        world.insert_one(e, mv);
+    }
+}
 
 fn move_handler(world: &mut hecs::World, m: &Grid<Tile>) {
     let mut moved: Vec<hecs::Entity> = vec![];
@@ -213,6 +243,7 @@ struct Viewshed {
 struct Name(String);
 
 struct Player;
+struct AI;
 
 type Move = Point;
 
