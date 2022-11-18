@@ -46,7 +46,7 @@ impl MainState {
         let hero = world.spawn((
             Player,
             Name("Hero".to_string()),
-            Physics { pos: hero_pos },
+            Position(hero_pos),
             gfx::Renderable {
                 spr: sprite_set.src_by_idx(gfx::CP437::ChAt as i32),
                 color: gfx::WHITE_BRIGHT,
@@ -60,7 +60,7 @@ impl MainState {
         world.spawn((
             Name("Giant Ant".to_string()),
             AI,
-            Physics { pos: pt(20, 14) },
+            Position(pt(20, 14)),
             gfx::Renderable {
                 spr: sprite_set.src_by_idx(gfx::CP437::Cha as i32),
                 color: gfx::BLUE_BRIGHT,
@@ -116,19 +116,19 @@ impl MainState {
                 }
             }
         }
-        for (_, (phys, renderable)) in self
+        for (_, (pos, renderable)) in self
             .world
-            .query::<(&Physics, &gfx::Renderable)>()
+            .query::<(&Position, &gfx::Renderable)>()
             .into_iter()
         {
             let draw = if let Ok(v) = &viewshed {
                 v.visible_tiles
-                    .contains(&Point::new(phys.pos.x as i32, phys.pos.y as i32))
+                    .contains(&Point::new(pos.0.x as i32, pos.0.y as i32))
             } else {
                 true
             };
             if draw {
-                let d: Vec2 = phys.pos.to_f32().to_array().into();
+                let d: Vec2 = pos.0.to_f32().to_array().into();
                 self.instances.push(
                     graphics::DrawParam::new()
                         .dest(d * 12.)
@@ -162,10 +162,10 @@ impl MainState {
 
 fn input_handler(world: &mut hecs::World, hero: hecs::Entity, input: &KeyState) -> bool {
     match input.key {
-        Some(KeyCode::Up) => world.insert_one(hero, pt(0, -1) as Move),
-        Some(KeyCode::Down) => world.insert_one(hero, pt(0, 1) as Move),
-        Some(KeyCode::Left) => world.insert_one(hero, pt(-1, 0) as Move),
-        Some(KeyCode::Right) => world.insert_one(hero, pt(1, 0) as Move),
+        Some(KeyCode::Up) => world.insert_one(hero, Move(pt(0, -1))),
+        Some(KeyCode::Down) => world.insert_one(hero, Move(pt(0, 1))),
+        Some(KeyCode::Left) => world.insert_one(hero, Move(pt(-1, 0))),
+        Some(KeyCode::Right) => world.insert_one(hero, Move(pt(1, 0))),
         Some(KeyCode::Period) => Ok(()),
         _ => return false,
     };
@@ -184,7 +184,7 @@ fn ai_handler(world: &mut hecs::World, _m: &Grid<Tile>) {
         .query::<()>()
         .with::<&AI>()
         .iter()
-        .map(|(e, _)| (e, pt(-1, 0) as Move))
+        .map(|(e, _)| (e, Move(pt(-1, 0))))
         .collect();
     for (e, mv) in moves {
         world.insert_one(e, mv);
@@ -193,15 +193,15 @@ fn ai_handler(world: &mut hecs::World, _m: &Grid<Tile>) {
 
 fn move_handler(world: &mut hecs::World, m: &Grid<Tile>) {
     let mut moved: Vec<hecs::Entity> = vec![];
-    for (e, (phys, d, viewshed)) in
-        world.query_mut::<(&mut Physics, &Move, Option<&mut Viewshed>)>()
+    for (e, (pos, d, viewshed)) in
+        world.query_mut::<(&mut Position, &Move, Option<&mut Viewshed>)>()
     {
-        let n = phys.pos + d.to_vector();
+        let n = pos.0 + d.0.to_vector();
         let t = m[n];
         if t.blocked() {
             continue;
         }
-        phys.pos = n;
+        pos.0 = n;
         if let Some(v) = viewshed {
             v.dirty = true;
         }
@@ -220,17 +220,15 @@ fn fov_handler(world: &mut hecs::World, m: &Grid<Tile>) {
             false
         }
     };
-    for (_, (phys, viewshed)) in world.query_mut::<(&Physics, &mut Viewshed)>() {
+    for (_, (pos, viewshed)) in world.query_mut::<(&Position, &mut Viewshed)>() {
         if viewshed.dirty {
-            viewshed.visible_tiles = fov::calculate(phys.pos, viewshed.range, opaque_at);
+            viewshed.visible_tiles = fov::calculate(pos.0, viewshed.range, opaque_at);
             viewshed.dirty = false;
         }
     }
 }
 
-struct Physics {
-    pos: Point,
-}
+struct Position(Point);
 
 struct Viewshed {
     visible_tiles: HashSet<Point>,
@@ -244,7 +242,7 @@ struct Name(String);
 struct Player;
 struct AI;
 
-type Move = Point;
+struct Move(Point);
 
 struct Map {
     tiles: Grid<Tile>,
