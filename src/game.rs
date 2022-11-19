@@ -2,6 +2,7 @@ use crate::{
     fov,
     geom::{pt, Grid, Point},
     gfx,
+    scene::{Scene, Transition},
 };
 use ggez::{
     glam::*,
@@ -12,43 +13,60 @@ use ggez::{
 use hecs;
 use std::collections::HashSet;
 
-pub struct MainState {
+pub struct GameState {
     world: hecs::World,
     hero: hecs::Entity,
-    instances: ggez::graphics::InstanceArray,
     sprite_set: gfx::SpriteSet,
     map: Map,
-    input: KeyState,
+    pub input: KeyState,
 }
 
-impl MainState {
+impl GameState {
     pub fn new(
-        ctx: &mut Context,
-        width: i32,
-        height: i32,
-        map_layer: Grid<Tile>,
-    ) -> GameResult<MainState> {
-        let sprite_set = gfx::SpriteSet::new(16, 16, 12, 12);
-        let image = graphics::Image::from_path(ctx, "/nice-curses.png")?;
+        world: hecs::World,
+        hero: hecs::Entity,
+        sprite_set: gfx::SpriteSet,
+        map: Map,
+    ) -> Self {
+        GameState { world, hero, sprite_set, map, input: KeyState::default() }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct KeyState {
+    pub key: Option<KeyCode>,
+    pub mods: Option<KeyMods>,
+    pub repeat: bool,
+}
+
+pub struct Game {
+    instances: graphics::InstanceArray,
+    width: i32,
+    height: i32,
+}
+
+impl Game {
+    pub fn new(ctx: &mut Context, state: &mut GameState, width: i32, height: i32) -> Self {
+        let image =
+            graphics::Image::from_path(ctx, "/nice-curses.png").expect("unable to load resource");
         let mut instances = graphics::InstanceArray::new(ctx, image);
         instances.resize(ctx, (width * height) as u32 + 50); // mapsize + 50 entities
 
         let mut hero_pos = pt(10, 10);
-        for x in 0..map_layer.width {
-            for y in 0..map_layer.height {
-                if map_layer[(x, y)] == Tile::StairUp {
+        for x in 0..state.map.tiles.width {
+            for y in 0..state.map.tiles.height {
+                if state.map.tiles[(x, y)] == Tile::StairUp {
                     hero_pos.x = x;
                     hero_pos.y = y;
                 }
             }
         }
-        let mut world = hecs::World::new();
-        let hero = world.spawn((
+        state.world.insert(state.hero, (
             Player,
             Name("Hero".to_string()),
             Position(hero_pos),
             gfx::Renderable {
-                spr: sprite_set.src_by_idx(gfx::CP437::ChAt as i32),
+                spr: state.sprite_set.src_by_idx(gfx::CP437::ChAt as i32),
                 color: gfx::WHITE_BRIGHT,
             },
             /*Viewshed {
@@ -57,44 +75,44 @@ impl MainState {
                 dirty: true,
             },*/
         ));
-        world.spawn((
+        state.world.spawn((
             Name("Giant Ant".to_string()),
             AI,
             Position(pt(20, 14)),
             gfx::Renderable {
-                spr: sprite_set.src_by_idx(gfx::CP437::Cha as i32),
+                spr: state.sprite_set.src_by_idx(gfx::CP437::Cha as i32),
                 color: gfx::BLUE_BRIGHT,
             },
         ));
-        Ok(MainState {
-            input: KeyState::default(),
-            world,
-            hero,
+        Game {
             instances,
-            sprite_set,
-            map: Map { tiles: map_layer },
-        })
-    }
-
-    pub fn update(&mut self) -> GameResult {
-        if input_handler(&mut self.world, self.hero, &self.input) {
-            // Monsters only act when the player acts
-            ai_handler(&mut self.world, &self.map.tiles);
+            width,
+            height,
         }
-        move_handler(&mut self.world, &self.map.tiles);
-        fov_handler(&mut self.world, &self.map.tiles);
+    }
+}
 
-        // Clear input
-        self.input.key = None;
-        self.input.mods = None;
+impl Scene<GameState> for Game {
+    fn update(&mut self, ctx: &mut Context, state: &mut GameState) -> Transition<GameState> {
+        if input_handler(&mut state.world, state.hero, &state.input) {
+            // Monsters only act when the player acts
+            ai_handler(&mut state.world, &state.map.tiles);
+        }
+        move_handler(&mut state.world, &state.map.tiles);
+        fov_handler(&mut state.world, &state.map.tiles);
 
-        Ok(())
+        Transition::None
     }
 
-    pub fn draw(&mut self, _ctx: &mut Context) -> &graphics::InstanceArray {
+    fn draw(&mut self, ctx: &mut Context, state: &mut GameState) -> GameResult {
+        let mut canvas = graphics::Canvas::from_frame(ctx, gfx::BACKGROUND);
+
+        // Currently broken, https://github.com/ggez/ggez/issues/1127
+        canvas.set_sampler(graphics::Sampler::nearest_clamp());
+
         self.instances.clear();
-        let map_layer = &self.map.tiles;
-        let viewshed = self.world.get::<&Viewshed>(self.hero);
+        let map_layer = &state.map.tiles;
+        let viewshed = state.world.get::<&Viewshed>(state.hero);
         for x in 0..map_layer.width {
             for y in 0..map_layer.height {
                 let pos = pt(x as i32, y as i32);
@@ -107,16 +125,16 @@ impl MainState {
                     let t = map_layer[(x, y)];
                     let d: Vec2 = pos.to_f32().to_array().into();
                     let spr = match t {
-                        Tile::Floor => self.sprite_set.src_by_idx(gfx::CP437::ChDot as i32),
-                        Tile::StairUp => self.sprite_set.src_by_idx(gfx::CP437::LessThan as i32),
-                        _ => self.sprite_set.src_by_idx(gfx::CP437::Pillar as i32),
+                        Tile::Floor => state.sprite_set.src_by_idx(gfx::CP437::ChDot as i32),
+                        Tile::StairUp => state.sprite_set.src_by_idx(gfx::CP437::LessThan as i32),
+                        _ => state.sprite_set.src_by_idx(gfx::CP437::Pillar as i32),
                     };
                     self.instances
                         .push(graphics::DrawParam::new().dest(d * 12.).src(spr));
                 }
             }
         }
-        for (_, (pos, renderable)) in self
+        for (_, (pos, renderable)) in state
             .world
             .query::<(&Position, &gfx::Renderable)>()
             .into_iter()
@@ -137,26 +155,28 @@ impl MainState {
                 );
             }
         }
+        let scale = Vec2::splat(
+            (canvas.scissor_rect().w / (self.width as f32 * 12.))
+                .min(canvas.scissor_rect().h / (self.height as f32 * 12.)),
+        );
+        canvas.draw(
+            &self.instances,
+            graphics::DrawParam::new()
+                .dest(Vec2::new(
+                    (canvas.scissor_rect().w - (self.width as f32 * 12.) * scale.x) / 2.,
+                    (canvas.scissor_rect().h - (self.height as f32 * 12.) * scale.y) / 2.,
+                ))
+                .scale(scale),
+        );
 
-        &self.instances
+        canvas.finish(ctx)
     }
 
-    pub fn key_down_event(
-        &mut self,
-        ctx: &mut Context,
-        input: KeyInput,
-        repeat: bool,
-    ) -> GameResult {
-        {
-            self.input.key = input.keycode;
-            self.input.mods = Some(input.mods);
-            self.input.repeat = repeat;
-        }
+    fn key_down(&mut self, input: KeyInput, _repeat: bool) -> Transition<GameState> {
         match input.keycode {
-            Some(KeyCode::Escape) => ctx.request_quit(),
-            _ => (),
-        };
-        Ok(())
+            Some(KeyCode::Escape) => Transition::Pop,
+            _ => Transition::None,
+        }
     }
 }
 
@@ -170,13 +190,6 @@ fn input_handler(world: &mut hecs::World, hero: hecs::Entity, input: &KeyState) 
         _ => return false,
     };
     true
-}
-
-#[derive(Debug, Default)]
-pub struct KeyState {
-    pub key: Option<KeyCode>,
-    pub mods: Option<KeyMods>,
-    pub repeat: bool,
 }
 
 fn ai_handler(world: &mut hecs::World, _m: &Grid<Tile>) {
@@ -244,8 +257,8 @@ struct AI;
 
 struct Move(Point);
 
-struct Map {
-    tiles: Grid<Tile>,
+pub struct Map {
+    pub tiles: Grid<Tile>,
 }
 
 #[derive(Copy, Clone, PartialEq)]

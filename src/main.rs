@@ -7,38 +7,46 @@ use ggez::{
 };
 use mapgen::Generator;
 use rand_seeder::{Seeder, SipRng};
+use scene::{Scene, SceneStack, Transition};
 
 mod fov;
 mod game;
 mod geom;
 mod gfx;
 mod mapgen;
+mod scene;
 
 const SCREEN_WIDTH_TILES: i32 = 60;
 const SCREEN_HEIGHT_TILES: i32 = 35;
 
 struct App {
-    game: game::MainState,
-    map_gen_active: bool,
-    map_gen_history: Vec<image::RgbaImage>,
-    map_gen_history_cur: usize,
+    state: game::GameState,
+    scenes: SceneStack<game::GameState>,
 }
 
 impl App {
     fn new(ctx: &mut Context) -> GameResult<App> {
+        let sprite_set = gfx::SpriteSet::new(16, 16, 12, 12);
+        let world = hecs::World::new();
+        let hero = world.reserve_entity();
+
         let mut rng: SipRng = Seeder::from("helloworld").make_rng();
         let mut map_gen_visualizer =
             mapgen::SimpleMapGenerator::new(SCREEN_WIDTH_TILES, SCREEN_HEIGHT_TILES);
-        let m = map_gen_visualizer.generate(&mut rng);
-        match game::MainState::new(ctx, SCREEN_WIDTH_TILES, SCREEN_HEIGHT_TILES, m) {
-            Ok(game) => Ok(App {
-                game,
-                map_gen_active: true,
-                map_gen_history: map_gen_visualizer.timeline(),
-                map_gen_history_cur: 0,
-            }),
-            Err(e) => Err(e),
-        }
+        let tiles = map_gen_visualizer.generate(&mut rng);
+        let mut state = game::GameState::new(world, hero, sprite_set, game::Map { tiles });
+        let mut scenes = SceneStack::new(Box::new(game::Game::new(
+            ctx,
+            &mut state,
+            SCREEN_WIDTH_TILES,
+            SCREEN_HEIGHT_TILES,
+        )));
+        scenes.push(Box::new(MapGenViewer {
+            history: map_gen_visualizer.timeline(),
+            cur: 0,
+        }));
+
+        Ok(App { state, scenes })
     }
 }
 
@@ -49,82 +57,28 @@ impl event::EventHandler<ggez::GameError> for App {
             timer::sleep(std::time::Duration::from_secs(0));
         }
 
-        self.game.update()
+        self.scenes.update(ctx, &mut self.state);
+
+        // Clear input
+        self.state.input.key = None;
+        self.state.input.mods = None;
+
+        Ok(())
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let mut canvas = graphics::Canvas::from_frame(ctx, gfx::BACKGROUND);
-
-        // Currently broken, https://github.com/ggez/ggez/issues/1127
-        canvas.set_sampler(graphics::Sampler::nearest_clamp());
-
-        if self.map_gen_active {
-            let img = graphics::Image::from_pixels(
-                ctx,
-                &self.map_gen_history[self.map_gen_history_cur],
-                graphics::ImageFormat::Rgba8UnormSrgb,
-                SCREEN_WIDTH_TILES as u32,
-                SCREEN_HEIGHT_TILES as u32,
-            );
-            let scale = Vec2::splat(
-                (canvas.scissor_rect().w / (SCREEN_WIDTH_TILES as f32))
-                    .min(canvas.scissor_rect().h / (SCREEN_HEIGHT_TILES as f32)),
-            );
-            canvas.draw(&img, graphics::DrawParam::new().scale(scale));
-        } else {
-            let game_view = self.game.draw(ctx);
-            let scale = Vec2::splat(
-                (canvas.scissor_rect().w / (SCREEN_WIDTH_TILES as f32 * 12.))
-                    .min(canvas.scissor_rect().h / (SCREEN_HEIGHT_TILES as f32 * 12.)),
-            );
-            canvas.draw(
-                game_view,
-                graphics::DrawParam::new()
-                    .dest(Vec2::new(
-                        (canvas.scissor_rect().w - (SCREEN_WIDTH_TILES as f32 * 12.) * scale.x)
-                            / 2.,
-                        (canvas.scissor_rect().h - (SCREEN_HEIGHT_TILES as f32 * 12.) * scale.y)
-                            / 2.,
-                    ))
-                    .scale(scale),
-            );
-        }
-
-        canvas.finish(ctx)
+        self.scenes.draw(ctx, &mut self.state);
+        Ok(())
     }
 
-    fn key_down_event(&mut self, ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
-        match input.keycode {
-            Some(KeyCode::Escape) => {
-                if self.map_gen_active {
-                    self.map_gen_active = false;
-                } else {
-                    ctx.request_quit();
-                }
-                Ok(())
-            }
-            Some(KeyCode::Right) => {
-                if self.map_gen_active {
-                    if self.map_gen_history_cur < self.map_gen_history.len() - 1 {
-                        self.map_gen_history_cur += 1;
-                    }
-                    Ok(())
-                } else {
-                    self.game.key_down_event(ctx, input, _repeat)
-                }
-            }
-            Some(KeyCode::Left) => {
-                if self.map_gen_active {
-                    if self.map_gen_history_cur > 0 {
-                        self.map_gen_history_cur -= 1;
-                    }
-                    Ok(())
-                } else {
-                    self.game.key_down_event(ctx, input, _repeat)
-                }
-            }
-            _ => self.game.key_down_event(ctx, input, _repeat),
-        }
+    fn key_down_event(&mut self, ctx: &mut Context, input: KeyInput, repeat: bool) -> GameResult {
+        self.state.input.key = input.keycode;
+        self.state.input.mods = Some(input.mods);
+        self.state.input.repeat = repeat;
+
+        self.scenes.input(ctx, input, repeat);
+
+        Ok(())
     }
 }
 
@@ -154,4 +108,58 @@ fn main() -> GameResult {
 
     let state = App::new(&mut ctx)?;
     event::run(ctx, event_loop, state)
+}
+
+struct MapGenViewer {
+    history: Vec<image::RgbaImage>,
+    cur: usize,
+}
+
+impl Scene<game::GameState> for MapGenViewer {
+    fn update(
+        &mut self,
+        _ctx: &mut Context,
+        _state: &mut game::GameState,
+    ) -> scene::Transition<game::GameState> {
+        Transition::None
+    }
+
+    fn draw(&mut self, ctx: &mut Context, _state: &mut game::GameState) -> GameResult {
+        let mut canvas = graphics::Canvas::from_frame(ctx, gfx::BACKGROUND);
+
+        // Currently broken, https://github.com/ggez/ggez/issues/1127
+        canvas.set_sampler(graphics::Sampler::nearest_clamp());
+        let img = graphics::Image::from_pixels(
+            ctx,
+            &self.history[self.cur],
+            graphics::ImageFormat::Rgba8UnormSrgb,
+            SCREEN_WIDTH_TILES as u32,
+            SCREEN_HEIGHT_TILES as u32,
+        );
+        let scale = Vec2::splat(
+            (canvas.scissor_rect().w / (SCREEN_WIDTH_TILES as f32))
+                .min(canvas.scissor_rect().h / (SCREEN_HEIGHT_TILES as f32)),
+        );
+        canvas.draw(&img, graphics::DrawParam::new().scale(scale));
+        canvas.finish(ctx)
+    }
+
+    fn key_down(&mut self, input: KeyInput, _repeat: bool) -> scene::Transition<game::GameState> {
+        match input.keycode {
+            Some(KeyCode::Escape) => Transition::Pop,
+            Some(KeyCode::Right) => {
+                if self.cur < self.history.len() - 1 {
+                    self.cur += 1;
+                };
+                Transition::None
+            }
+            Some(KeyCode::Left) => {
+                if self.cur > 0 {
+                    self.cur -= 1;
+                }
+                Transition::None
+            }
+            _ => Transition::None,
+        }
+    }
 }
