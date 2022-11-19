@@ -47,9 +47,7 @@ pub struct Game {
 
 impl Game {
     pub fn new(ctx: &mut Context, state: &mut GameState, width: i32, height: i32) -> Self {
-        let image =
-            graphics::Image::from_path(ctx, "/nice-curses.png").expect("unable to load resource");
-        let mut instances = graphics::InstanceArray::new(ctx, image);
+        let mut instances = graphics::InstanceArray::new(ctx, state.sprite_set.img.clone());
         instances.resize(ctx, (width * height) as u32 + 50); // mapsize + 50 entities
 
         let mut hero_pos = pt(10, 10);

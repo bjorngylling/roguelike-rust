@@ -26,7 +26,9 @@ struct App {
 
 impl App {
     fn new(ctx: &mut Context) -> GameResult<App> {
-        let sprite_set = gfx::SpriteSet::new(16, 16, 12, 12);
+        let image =
+            graphics::Image::from_path(ctx, "/nice-curses.png").expect("unable to load resource");
+        let sprite_set = gfx::SpriteSet::new(image, 16, 16, 12, 12);
         let world = hecs::World::new();
         let hero = world.reserve_entity();
 
