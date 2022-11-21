@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 euclid = "0.22.7"
-ggez = "0.8.1"
+ggez = { git = "https://github.com/ggez/ggez", branch = "devel" }
 hecs = "0.9.0"
 image = "0.24.4"
 rand = "0.8.5"
