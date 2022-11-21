@@ -63,6 +63,7 @@ impl Game {
             Player,
             Name("Hero".to_string()),
             Position(hero_pos),
+            BlocksTile,
             gfx::Renderable {
                 spr: state.sprite_set.src_by_idx(gfx::CP437::ChAt as i32),
                 color: gfx::WHITE_BRIGHT,
@@ -77,6 +78,7 @@ impl Game {
             Name("Giant Ant".to_string()),
             AI,
             Position(pt(20, 14)),
+            BlocksTile,
             gfx::Renderable {
                 spr: state.sprite_set.src_by_idx(gfx::CP437::Cha as i32),
                 color: gfx::BLUE_BRIGHT,
@@ -91,12 +93,13 @@ impl Game {
 }
 
 impl Scene<GameState> for Game {
-    fn update(&mut self, ctx: &mut Context, state: &mut GameState) -> Transition<GameState> {
+    fn update(&mut self, _ctx: &mut Context, state: &mut GameState) -> Transition<GameState> {
+        map_indexing_handler(&state.world, &mut state.map);
         if input_handler(&mut state.world, state.hero, &state.input) {
             // Monsters only act when the player acts
             ai_handler(&mut state.world, &state.map.tiles);
         }
-        move_handler(&mut state.world, &state.map.tiles);
+        move_handler(&mut state.world, &state.map);
         fov_handler(&mut state.world, &state.map.tiles);
 
         Transition::None
@@ -202,14 +205,13 @@ fn ai_handler(world: &mut hecs::World, _m: &Grid<Tile>) {
     }
 }
 
-fn move_handler(world: &mut hecs::World, m: &Grid<Tile>) {
+fn move_handler(world: &mut hecs::World, m: &Map) {
     let mut moved: Vec<hecs::Entity> = vec![];
     for (e, (pos, d, viewshed)) in
         world.query_mut::<(&mut Position, &Move, Option<&mut Viewshed>)>()
     {
         let n = pos.0 + d.0.to_vector();
-        let t = m[n];
-        if t.blocked() {
+        if m.blocked[n] {
             continue;
         }
         pos.0 = n;
@@ -239,7 +241,21 @@ fn fov_handler(world: &mut hecs::World, m: &Grid<Tile>) {
     }
 }
 
+fn map_indexing_handler(world: &hecs::World, m: &mut Map) {
+    m.clear_entities();
+    m.calc_blocked_from_tile();
+
+    for (e, (pos, blocks)) in world.query::<(&Position, Option<&BlocksTile>)>().iter() {
+        m.entities[pos.0].push(e);
+
+        if blocks.is_some() {
+            m.blocked[pos.0] = true;
+        }
+    }
+}
+
 struct Position(Point);
+struct BlocksTile;
 
 struct Viewshed {
     visible_tiles: HashSet<Point>,
@@ -257,6 +273,30 @@ struct Move(Point);
 
 pub struct Map {
     pub tiles: Grid<Tile>,
+    pub entities: Grid<Vec<hecs::Entity>>,
+    pub blocked: Grid<bool>,
+}
+
+impl Map {
+    pub fn new(tiles: Grid<Tile>) -> Self {
+        let entities = Grid::new(tiles.width, tiles.height, vec![]);
+        let blocked = Grid::new(tiles.width, tiles.height, false);
+        Map{ tiles, entities, blocked }
+    }
+
+    fn clear_entities(&mut self) {
+        for v in self.entities.iter_mut() {
+            v.clear()
+        }
+    }
+
+    fn calc_blocked_from_tile(&mut self) {
+        for y in 0..self.tiles.height {
+            for x in 0..self.tiles.width {
+                self.blocked[(x, y)] = self.tiles[(x, y)].blocked()
+            }
+        }
+    }
 }
 
 #[derive(Copy, Clone, PartialEq)]

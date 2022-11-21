@@ -36,7 +36,7 @@ impl App {
         let mut map_gen_visualizer =
             mapgen::SimpleMapGenerator::new(SCREEN_WIDTH_TILES, SCREEN_HEIGHT_TILES);
         let tiles = map_gen_visualizer.generate(&mut rng);
-        let mut state = game::GameState::new(world, hero, sprite_set, game::Map { tiles });
+        let mut state = game::GameState::new(world, hero, sprite_set, game::Map::new(tiles));
         let mut scenes = SceneStack::new(Box::new(game::Game::new(
             ctx,
             &mut state,
