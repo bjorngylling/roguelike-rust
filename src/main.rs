@@ -31,7 +31,12 @@ impl App {
         let sprite_set = gfx::SpriteSet::new(image, 16, 16, 12, 12);
         let world = hecs::World::new();
         let hero = world.reserve_entity();
-        let mut state = game::GameState::new(world, hero, sprite_set, game::Map::new(SCREEN_WIDTH_TILES, SCREEN_HEIGHT_TILES));
+        let mut state = game::GameState::new(
+            world,
+            hero,
+            sprite_set,
+            game::Map::new(SCREEN_WIDTH_TILES, SCREEN_HEIGHT_TILES),
+        );
 
         let mut rng: SipRng = Seeder::from("helloworld").make_rng();
         let mut map_gen_visualizer =
@@ -56,14 +61,12 @@ impl event::EventHandler<ggez::GameError> for App {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         const DESIRED_FPS: u32 = 60;
         while ctx.time.check_update_time(DESIRED_FPS) {
-            timer::sleep(std::time::Duration::from_secs(0));
+            self.scenes.update(ctx, &mut self.state);
+
+            // Clear input
+            self.state.input.key = None;
+            self.state.input.mods = None;
         }
-
-        self.scenes.update(ctx, &mut self.state);
-
-        // Clear input
-        self.state.input.key = None;
-        self.state.input.mods = None;
 
         Ok(())
     }
