@@ -31,12 +31,12 @@ impl App {
         let sprite_set = gfx::SpriteSet::new(image, 16, 16, 12, 12);
         let world = hecs::World::new();
         let hero = world.reserve_entity();
+        let mut state = game::GameState::new(world, hero, sprite_set, game::Map::new(SCREEN_WIDTH_TILES, SCREEN_HEIGHT_TILES));
 
         let mut rng: SipRng = Seeder::from("helloworld").make_rng();
         let mut map_gen_visualizer =
-            mapgen::SimpleMapGenerator::new(SCREEN_WIDTH_TILES, SCREEN_HEIGHT_TILES);
-        let tiles = map_gen_visualizer.generate(&mut rng);
-        let mut state = game::GameState::new(world, hero, sprite_set, game::Map::new(tiles));
+            mapgen::SimpleMapGenerator::new(state.map.tiles.width, state.map.tiles.height);
+        map_gen_visualizer.run(&mut rng, &mut state.map);
         let mut scenes = SceneStack::new(Box::new(game::Game::new(
             ctx,
             &mut state,

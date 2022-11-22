@@ -17,7 +17,7 @@ pub struct GameState {
     world: hecs::World,
     hero: hecs::Entity,
     sprite_set: gfx::SpriteSet,
-    map: Map,
+    pub map: Map,
     pub input: KeyState,
 }
 
@@ -28,7 +28,13 @@ impl GameState {
         sprite_set: gfx::SpriteSet,
         map: Map,
     ) -> Self {
-        GameState { world, hero, sprite_set, map, input: KeyState::default() }
+        GameState {
+            world,
+            hero,
+            sprite_set,
+            map,
+            input: KeyState::default(),
+        }
     }
 }
 
@@ -50,30 +56,24 @@ impl Game {
         let mut instances = graphics::InstanceArray::new(ctx, state.sprite_set.img.clone());
         instances.resize(ctx, (width * height) as u32 + 50); // mapsize + 50 entities
 
-        let mut hero_pos = pt(10, 10);
-        for x in 0..state.map.tiles.width {
-            for y in 0..state.map.tiles.height {
-                if state.map.tiles[(x, y)] == Tile::StairUp {
-                    hero_pos.x = x;
-                    hero_pos.y = y;
-                }
-            }
-        }
-        state.world.insert(state.hero, (
-            Player,
-            Name("Hero".to_string()),
-            Position(hero_pos),
-            BlocksTile,
-            gfx::Renderable {
-                spr: state.sprite_set.src_by_idx(gfx::CP437::ChAt as i32),
-                color: gfx::WHITE_BRIGHT,
-            },
-            /*Viewshed {
-                visible_tiles: HashSet::new(),
-                range: 7,
-                dirty: true,
-            },*/
-        ));
+        state.world.insert(
+            state.hero,
+            (
+                Player,
+                Name("Hero".to_string()),
+                Position(state.map.entrance),
+                BlocksTile,
+                gfx::Renderable {
+                    spr: state.sprite_set.src_by_idx(gfx::CP437::ChAt as i32),
+                    color: gfx::WHITE_BRIGHT,
+                },
+                /*Viewshed {
+                    visible_tiles: HashSet::new(),
+                    range: 7,
+                    dirty: true,
+                },*/
+            ),
+        );
         state.world.spawn((
             Name("Giant Ant".to_string()),
             AI,
@@ -272,16 +272,23 @@ struct AI;
 struct Move(Point);
 
 pub struct Map {
+    pub entrance: Point,
     pub tiles: Grid<Tile>,
     pub entities: Grid<Vec<hecs::Entity>>,
     pub blocked: Grid<bool>,
 }
 
 impl Map {
-    pub fn new(tiles: Grid<Tile>) -> Self {
-        let entities = Grid::new(tiles.width, tiles.height, vec![]);
-        let blocked = Grid::new(tiles.width, tiles.height, false);
-        Map{ tiles, entities, blocked }
+    pub fn new(w: i32, h: i32) -> Self {
+        let tiles = Grid::new(w, h, Tile::Wall);
+        let entities = Grid::new(w, h, vec![]);
+        let blocked = Grid::new(w, h, false);
+        Map {
+            entrance: pt(0, 0),
+            tiles,
+            entities,
+            blocked,
+        }
     }
 
     fn clear_entities(&mut self) {

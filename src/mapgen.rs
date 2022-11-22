@@ -1,4 +1,4 @@
-use crate::game::Tile;
+use crate::game::{Map, Tile};
 use crate::geom::{pt, Grid, Point};
 use euclid::Box2D;
 use image::RgbaImage;
@@ -6,7 +6,7 @@ use rand::Rng;
 use std::collections::HashSet;
 
 pub trait Generator {
-    fn generate(&mut self, rng: &mut impl Rng) -> Grid<Tile>;
+    fn run(&mut self, rng: &mut impl Rng, map: &mut Map);
     fn timeline(&self) -> Vec<RgbaImage>;
 }
 
@@ -79,7 +79,7 @@ impl SimpleMapGenerator {
 }
 
 impl Generator for SimpleMapGenerator {
-    fn generate(&mut self, rng: &mut impl Rng) -> Grid<Tile> {
+    fn run(&mut self, rng: &mut impl Rng, map: &mut Map) {
         let mut rooms: Vec<Box2D<i32, i32>> = vec![];
         for _ in 0..30 {
             let w = rng.gen_range(5..=12);
@@ -139,17 +139,16 @@ impl Generator for SimpleMapGenerator {
             ]);
         }
 
-        let mut m = Grid::new(self.bounds.width(), self.bounds.height(), Tile::Wall);
         for y in 0..self.bounds.height() {
             for x in 0..self.bounds.width() {
                 if self.m[(x, y)] == 0 {
-                    m[(x, y)] = Tile::Floor;
+                    map.tiles[(x, y)] = Tile::Floor;
                 }
             }
         }
         // Put the entrance in the center of the first room
-        m[rooms.first().unwrap().center()] = Tile::StairUp;
-        m
+        map.tiles[rooms.first().unwrap().center()] = Tile::StairUp;
+        map.entrance = rooms.first().unwrap().center();
     }
 
     fn timeline(&self) -> Vec<RgbaImage> {
