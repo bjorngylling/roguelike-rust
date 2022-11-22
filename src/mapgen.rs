@@ -52,7 +52,7 @@ impl SimpleMapGenerator {
         for w in corridor.windows(2) {
             let (a, b) = (w[0], w[1]);
             if a.x != b.x {
-                for x in a.x..b.x {
+                for x in a.x..=b.x {
                     if self.m[(x, a.y)] == 0 {
                         img.put_pixel(
                             x as u32,
@@ -62,7 +62,7 @@ impl SimpleMapGenerator {
                     }
                 }
             } else if a.y != b.y {
-                for y in a.y..b.y {
+                for y in a.y..=b.y {
                     if self.m[(a.x, y)] == 0 {
                         img.put_pixel(
                             a.x as u32,
