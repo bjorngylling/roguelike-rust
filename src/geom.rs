@@ -1,5 +1,3 @@
-use std::vec::IntoIter;
-
 use euclid::{point2, Point2D};
 
 pub type Point = Point2D<i32, i32>;
@@ -31,7 +29,7 @@ impl<T: std::clone::Clone> Grid<T> {
         self.storage.iter_mut()
     }
 
-    pub fn iter(&mut self) -> std::slice::Iter<T> {
+    pub fn iter(&self) -> std::slice::Iter<T> {
         self.storage.iter()
     }
 }

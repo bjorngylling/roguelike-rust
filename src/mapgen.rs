@@ -1,29 +1,48 @@
 use crate::game::{Map, Tile};
 use crate::geom::{pt, Grid, Point};
+use crate::gfx;
 use euclid::Box2D;
-use image::RgbaImage;
+use ggez::graphics;
 use rand::Rng;
 use std::collections::HashSet;
 
 pub trait Generator {
     fn run(&mut self, rng: &mut impl Rng, map: &mut Map);
-    fn timeline(&self) -> Vec<RgbaImage>;
+    fn timeline(&self) -> Vec<Grid<graphics::Color>>;
 }
 
 pub struct SimpleMapGenerator {
-    timeline: Vec<RgbaImage>,
+    timeline: Vec<Grid<graphics::Color>>,
+    colors: Vec<graphics::Color>,
+    cur: usize,
     bounds: Box2D<i32, i32>,
     m: Grid<u8>,
 }
 
 impl SimpleMapGenerator {
     pub fn new(width: i32, height: i32) -> Self {
+        let colors: Vec<graphics::Color> = vec![
+            gfx::BLACK_BRIGHT,
+            gfx::BLUE_BRIGHT,
+            gfx::RED_BRIGHT,
+            gfx::CYAN_BRIGHT,
+            gfx::GREEN_BRIGHT,
+            gfx::WHITE_BRIGHT,
+            gfx::YELLOW_BRIGHT,
+            gfx::MAGENTA_BRIGHT,
+            gfx::BLACK,
+            gfx::BLUE,
+            gfx::RED,
+            gfx::CYAN,
+            gfx::GREEN,
+            gfx::WHITE,
+            gfx::YELLOW,
+            gfx::MAGENTA,
+        ];
         SimpleMapGenerator {
-            timeline: vec![RgbaImage::from_pixel(
-                width as u32,
-                height as u32,
-                image::Rgba::from([0, 0, 0, 255]),
-            )],
+            timeline: vec![Grid::new(width, height, gfx::BACKGROUND)],
+            colors,
+            cur: 0,
             bounds: Box2D {
                 min: pt(0, 0),
                 max: pt(width, height),
@@ -35,10 +54,12 @@ impl SimpleMapGenerator {
     fn snapshot_room(&mut self, room: Box2D<i32, i32>) {
         let mut img = self.timeline().last().unwrap().clone();
 
+        let c = self.colors[self.cur];
+        self.cur = (self.cur + 1) % self.colors.len();
         for y in room.y_range() {
             for x in room.x_range() {
                 if self.m[(x, y)] == 0 {
-                    img.put_pixel(x as u32, y as u32, image::Rgba::from([255, 255, 255, 255]))
+                    img[(x, y)] = c;
                 }
             }
         }
@@ -49,26 +70,20 @@ impl SimpleMapGenerator {
     fn snapshot_corridor(&mut self, corridor: Vec<Point>) {
         let mut img = self.timeline().last().unwrap().clone();
 
+        let c = self.colors[self.cur];
+        self.cur = (self.cur + 1) % self.colors.len();
         for w in corridor.windows(2) {
             let (a, b) = (w[0], w[1]);
             if a.x != b.x {
                 for x in a.x..=b.x {
                     if self.m[(x, a.y)] == 0 {
-                        img.put_pixel(
-                            x as u32,
-                            a.y as u32,
-                            image::Rgba::from([255, 255, 255, 255]),
-                        )
+                        img[(x, a.y)] = c;
                     }
                 }
             } else if a.y != b.y {
                 for y in a.y..=b.y {
                     if self.m[(a.x, y)] == 0 {
-                        img.put_pixel(
-                            a.x as u32,
-                            y as u32,
-                            image::Rgba::from([255, 255, 255, 255]),
-                        )
+                        img[(a.x, y)] = c;
                     }
                 }
             }
@@ -151,7 +166,7 @@ impl Generator for SimpleMapGenerator {
         map.entrance = rooms.first().unwrap().center();
     }
 
-    fn timeline(&self) -> Vec<RgbaImage> {
+    fn timeline(&self) -> Vec<Grid<graphics::Color>> {
         self.timeline.clone()
     }
 }

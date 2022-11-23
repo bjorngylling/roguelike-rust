@@ -116,8 +116,14 @@ fn main() -> GameResult {
 }
 
 struct MapGenViewer {
-    history: Vec<image::RgbaImage>,
+    history: Vec<geom::Grid<graphics::Color>>,
     cur: usize,
+}
+
+impl MapGenViewer {
+    fn grid_to_pixels(g: &geom::Grid<graphics::Color>) -> Vec<u8> {
+        g.iter().flat_map(|c| vec![c.to_rgba().0, c.to_rgba().1, c.to_rgba().2, c.to_rgba().3]).collect()
+    }
 }
 
 impl Scene<game::GameState> for MapGenViewer {
@@ -136,7 +142,7 @@ impl Scene<game::GameState> for MapGenViewer {
         canvas.set_sampler(graphics::Sampler::nearest_clamp());
         let img = graphics::Image::from_pixels(
             ctx,
-            &self.history[self.cur],
+            &MapGenViewer::grid_to_pixels(&self.history[self.cur]),
             graphics::ImageFormat::Rgba8UnormSrgb,
             SCREEN_WIDTH_TILES as u32,
             SCREEN_HEIGHT_TILES as u32,
@@ -148,6 +154,7 @@ impl Scene<game::GameState> for MapGenViewer {
         canvas.draw(&img, graphics::DrawParam::new().scale(scale));
         canvas.finish(ctx)
     }
+
 
     fn key_down(&mut self, input: KeyInput, _repeat: bool) -> scene::Transition<game::GameState> {
         match input.keycode {
