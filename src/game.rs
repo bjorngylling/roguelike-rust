@@ -17,6 +17,7 @@ pub struct GameState {
     world: hecs::World,
     hero: hecs::Entity,
     sprite_set: gfx::SpriteSet,
+    chan: shrev::EventChannel<Event>,
     pub map: Map,
     pub input: KeyState,
 }
@@ -34,6 +35,7 @@ impl GameState {
             sprite_set,
             map,
             input: KeyState::default(),
+            chan: shrev::EventChannel::new(),
         }
     }
 }
@@ -49,6 +51,7 @@ pub struct Game {
     instances: graphics::InstanceArray,
     width: i32,
     height: i32,
+    move_reader: shrev::ReaderId<Event>,
 }
 
 impl Game {
@@ -88,6 +91,7 @@ impl Game {
             instances,
             width,
             height,
+            move_reader: state.chan.register_reader(),
         }
     }
 }
@@ -95,11 +99,16 @@ impl Game {
 impl Scene<GameState> for Game {
     fn update(&mut self, _ctx: &mut Context, state: &mut GameState) -> Transition<GameState> {
         map_indexing_handler(&state.world, &mut state.map);
-        if input_handler(&mut state.world, state.hero, &state.input) {
+        if input_handler(&state.input, state.hero, &mut state.chan) {
             // Monsters only act when the player acts
-            ai_handler(&mut state.world, &state.map.tiles);
+            ai_handler(&state.world, &mut state.chan);
         }
-        move_handler(&mut state.world, &state.map);
+        move_handler(
+            &mut state.world,
+            &state.map,
+            &state.chan,
+            &mut self.move_reader,
+        );
         fov_handler(&mut state.world, &state.map.tiles);
 
         Transition::None
@@ -181,47 +190,50 @@ impl Scene<GameState> for Game {
     }
 }
 
-fn input_handler(world: &mut hecs::World, hero: hecs::Entity, input: &KeyState) -> bool {
+fn input_handler(input: &KeyState, hero: hecs::Entity, chan: &mut EventChan) -> bool {
     match input.key {
-        Some(KeyCode::Up) => world.insert_one(hero, Move(pt(0, -1))),
-        Some(KeyCode::Down) => world.insert_one(hero, Move(pt(0, 1))),
-        Some(KeyCode::Left) => world.insert_one(hero, Move(pt(-1, 0))),
-        Some(KeyCode::Right) => world.insert_one(hero, Move(pt(1, 0))),
-        Some(KeyCode::Period) => Ok(()),
+        Some(KeyCode::Up) => chan.single_write(Event::Move(hero, pt(0, -1))),
+        Some(KeyCode::Down) => chan.single_write(Event::Move(hero, pt(0, 1))),
+        Some(KeyCode::Left) => chan.single_write(Event::Move(hero, pt(-1, 0))),
+        Some(KeyCode::Right) => chan.single_write(Event::Move(hero, pt(1, 0))),
+        Some(KeyCode::Period) => (),
         _ => return false,
     };
     true
 }
 
-fn ai_handler(world: &mut hecs::World, _m: &Grid<Tile>) {
-    let moves: Vec<_> = world
+fn ai_handler(world: &hecs::World, chan: &mut EventChan) {
+    world
         .query::<()>()
         .with::<&AI>()
         .iter()
-        .map(|(e, _)| (e, Move(pt(-1, 0))))
-        .collect();
-    for (e, mv) in moves {
-        world.insert_one(e, mv);
-    }
+        .map(|(e, _)| Event::Move(e, pt(-1, 0)))
+        .for_each(|e| chan.single_write(e));
 }
 
-fn move_handler(world: &mut hecs::World, m: &Map) {
-    let mut moved: Vec<hecs::Entity> = vec![];
-    for (e, (pos, d, viewshed)) in
-        world.query_mut::<(&mut Position, &Move, Option<&mut Viewshed>)>()
-    {
-        let n = pos.0 + d.0.to_vector();
-        if m.blocked[n] {
-            continue;
-        }
-        pos.0 = n;
-        if let Some(v) = viewshed {
-            v.dirty = true;
-        }
-        moved.push(e);
-    }
-    for e in moved {
-        world.remove_one::<Move>(e);
+fn move_handler(
+    world: &mut hecs::World,
+    map: &Map,
+    chan: &EventChan,
+    r: &mut shrev::ReaderId<Event>,
+) {
+    for ev in chan.read(r) {
+        match ev {
+            Event::Move(e, m) => {
+                for (pos, viewshed) in
+                    world.query_one_mut::<(&mut Position, Option<&mut Viewshed>)>(*e)
+                {
+                    let n = pos.0 + m.to_vector();
+                    if map.blocked[n] {
+                        continue;
+                    }
+                    pos.0 = n;
+                    if let Some(v) = viewshed {
+                        v.dirty = true;
+                    }
+                }
+            }
+        };
     }
 }
 
@@ -254,6 +266,11 @@ fn map_indexing_handler(world: &hecs::World, m: &mut Map) {
     }
 }
 
+type EventChan = shrev::EventChannel<Event>;
+enum Event {
+    Move(hecs::Entity, Point),
+}
+
 struct Position(Point);
 struct BlocksTile;
 
@@ -268,8 +285,6 @@ struct Name(String);
 
 struct Player;
 struct AI;
-
-struct Move(Point);
 
 pub struct Map {
     pub entrance: Point,

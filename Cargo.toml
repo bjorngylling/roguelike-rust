@@ -11,4 +11,5 @@ ggez = { git = "https://github.com/ggez/ggez", branch = "devel" }
 hecs = "0.9.0"
 rand = "0.8.5"
 rand_seeder = "0.2.3"
+shrev = "1.1.3"
 
