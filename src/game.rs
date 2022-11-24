@@ -52,6 +52,7 @@ pub struct Game {
     width: i32,
     height: i32,
     move_reader: shrev::ReaderId<Event>,
+    collision_reader: shrev::ReaderId<Event>,
 }
 
 impl Game {
@@ -80,7 +81,17 @@ impl Game {
         state.world.spawn((
             Name("Giant Ant".to_string()),
             AI,
-            Position(pt(20, 14)),
+            Position(pt(20, 13)),
+            BlocksTile,
+            gfx::Renderable {
+                spr: state.sprite_set.src_by_idx(gfx::CP437::Cha as i32),
+                color: gfx::BLUE_BRIGHT,
+            },
+        ));
+        state.world.spawn((
+            Name("Giant Ant".to_string()),
+            AI,
+            Position(state.map.entrance + pt(10, -1).to_vector()),
             BlocksTile,
             gfx::Renderable {
                 spr: state.sprite_set.src_by_idx(gfx::CP437::Cha as i32),
@@ -92,6 +103,7 @@ impl Game {
             width,
             height,
             move_reader: state.chan.register_reader(),
+            collision_reader: state.chan.register_reader(),
         }
     }
 }
@@ -106,9 +118,10 @@ impl Scene<GameState> for Game {
         move_handler(
             &mut state.world,
             &state.map,
-            &state.chan,
+            &mut state.chan,
             &mut self.move_reader,
         );
+        collision_handler(&mut state.world, &state.chan, &mut self.collision_reader);
         fov_handler(&mut state.world, &state.map.tiles);
 
         Transition::None
@@ -214,9 +227,10 @@ fn ai_handler(world: &hecs::World, chan: &mut EventChan) {
 fn move_handler(
     world: &mut hecs::World,
     map: &Map,
-    chan: &EventChan,
+    chan: &mut EventChan,
     r: &mut shrev::ReaderId<Event>,
 ) {
+    let mut collisions: Vec<Event> = vec![];
     for ev in chan.read(r) {
         match ev {
             Event::Move(e, m) => {
@@ -225,6 +239,9 @@ fn move_handler(
                 {
                     let n = pos.0 + m.to_vector();
                     if map.blocked[n] {
+                        for other in &map.entities[n] {
+                            collisions.push(Event::Collision(*e, *other));
+                        }
                         continue;
                     }
                     pos.0 = n;
@@ -233,8 +250,10 @@ fn move_handler(
                     }
                 }
             }
+            _ => (),
         };
     }
+    chan.drain_vec_write(&mut collisions);
 }
 
 fn fov_handler(world: &mut hecs::World, m: &Grid<Tile>) {
@@ -266,9 +285,28 @@ fn map_indexing_handler(world: &hecs::World, m: &mut Map) {
     }
 }
 
+fn collision_handler(world: &mut hecs::World, chan: &EventChan, r: &mut shrev::ReaderId<Event>) {
+    for ev in chan.read(r) {
+        match ev {
+            Event::Collision(a, b) => {
+                {
+                    let e = world.get::<&Name>(*a).unwrap();
+                    let other = world.get::<&Name>(*b).unwrap();
+                    println!("{} attacks {}.", e.0, other.0,);
+                }
+                world.despawn(*b);
+                ()
+            }
+            _ => (),
+        }
+    }
+}
+
 type EventChan = shrev::EventChannel<Event>;
+#[derive(Clone)]
 enum Event {
     Move(hecs::Entity, Point),
+    Collision(hecs::Entity, hecs::Entity),
 }
 
 struct Position(Point);
@@ -321,7 +359,7 @@ impl Map {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Tile {
     Wall,
     Floor,
