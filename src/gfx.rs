@@ -133,7 +133,13 @@ pub struct SpriteSet {
 }
 
 impl SpriteSet {
-    pub fn new(img: graphics::Image, cols: i32, rows: i32, tile_width: i32, tile_height: i32) -> SpriteSet {
+    pub fn new(
+        img: graphics::Image,
+        cols: i32,
+        rows: i32,
+        tile_width: i32,
+        tile_height: i32,
+    ) -> SpriteSet {
         let wf = tile_width as f32;
         let hf = tile_height as f32;
         let w = wf / (cols as f32 * wf);
@@ -173,4 +179,3 @@ impl SpriteSet {
         }
     }
 }
-

@@ -76,4 +76,3 @@ impl<T> SceneStack<T> {
         self.switch(t);
     }
 }
-

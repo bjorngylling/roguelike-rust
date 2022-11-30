@@ -3,7 +3,7 @@ use ggez::{
     glam::*,
     graphics,
     input::keyboard::{KeyCode, KeyInput},
-    timer, Context, GameResult,
+    Context, GameResult,
 };
 use mapgen::Generator;
 use rand_seeder::{Seeder, SipRng};
@@ -122,7 +122,9 @@ struct MapGenViewer {
 
 impl MapGenViewer {
     fn grid_to_pixels(g: &geom::Grid<graphics::Color>) -> Vec<u8> {
-        g.iter().flat_map(|c| vec![c.to_rgba().0, c.to_rgba().1, c.to_rgba().2, c.to_rgba().3]).collect()
+        g.iter()
+            .flat_map(|c| vec![c.to_rgba().0, c.to_rgba().1, c.to_rgba().2, c.to_rgba().3])
+            .collect()
     }
 }
 
@@ -154,7 +156,6 @@ impl Scene<game::GameState> for MapGenViewer {
         canvas.draw(&img, graphics::DrawParam::new().scale(scale));
         canvas.finish(ctx)
     }
-
 
     fn key_down(&mut self, input: KeyInput, _repeat: bool) -> scene::Transition<game::GameState> {
         match input.keycode {
