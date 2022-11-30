@@ -71,11 +71,11 @@ impl Game {
                     spr: state.sprite_set.src_by_idx(gfx::CP437::ChAt as i32),
                     color: gfx::WHITE_BRIGHT,
                 },
-                /*Viewshed {
+                Viewshed {
                     visible_tiles: HashSet::new(),
                     range: 7,
                     dirty: true,
-                },*/
+                },
             ),
         );
         state.world.spawn((
@@ -122,7 +122,7 @@ impl Scene<GameState> for Game {
             &mut self.move_reader,
         );
         collision_handler(&mut state.world, &state.chan, &mut self.collision_reader);
-        fov_handler(&mut state.world, &state.map.tiles);
+        fov_handler(&mut state.world, &state.map.tiles, &mut state.map.explored);
 
         Transition::None
     }
@@ -139,12 +139,13 @@ impl Scene<GameState> for Game {
         for x in 0..map_layer.width {
             for y in 0..map_layer.height {
                 let pos = pt(x as i32, y as i32);
-                let draw = if let Ok(v) = &viewshed {
+                let in_los = if let Ok(v) = &viewshed {
                     v.visible_tiles.contains(&pos)
                 } else {
                     true
                 };
-                if draw {
+                let explored = state.map.explored[pos];
+                if in_los || explored {
                     let t = map_layer[(x, y)];
                     let d: Vec2 = pos.to_f32().to_array().into();
                     let spr = match t {
@@ -152,8 +153,12 @@ impl Scene<GameState> for Game {
                         Tile::StairUp => state.sprite_set.src_by_idx(gfx::CP437::LessThan as i32),
                         _ => state.sprite_set.src_by_idx(gfx::CP437::Pillar as i32),
                     };
+                    let mut draw = graphics::DrawParam::new().dest(d * 12.).src(spr);
+                    if explored && !in_los {
+                        draw.color.a *= 0.2;
+                    }
                     self.instances
-                        .push(graphics::DrawParam::new().dest(d * 12.).src(spr));
+                        .push(draw);
                 }
             }
         }
@@ -256,7 +261,7 @@ fn move_handler(
     chan.drain_vec_write(&mut collisions);
 }
 
-fn fov_handler(world: &mut hecs::World, m: &Grid<Tile>) {
+fn fov_handler(world: &mut hecs::World, m: &Grid<Tile>, explored: &mut Grid<bool>) {
     let opaque_at = |p: Point| {
         if p.x >= 0 && p.x < m.width as i32 && p.y >= 0 && p.y < m.height as i32 {
             m[p].opaque()
@@ -264,10 +269,17 @@ fn fov_handler(world: &mut hecs::World, m: &Grid<Tile>) {
             false
         }
     };
-    for (_, (pos, viewshed)) in world.query_mut::<(&Position, &mut Viewshed)>() {
+    for (_, (pos, viewshed, player)) in
+        world.query_mut::<(&Position, &mut Viewshed, Option<&Player>)>()
+    {
         if viewshed.dirty {
             viewshed.visible_tiles = fov::calculate(pos.0, viewshed.range, opaque_at);
             viewshed.dirty = false;
+            if player.is_some() {
+                for p in &viewshed.visible_tiles {
+                    explored[*p] = true;
+                }
+            }
         }
     }
 }
@@ -329,6 +341,7 @@ pub struct Map {
     pub tiles: Grid<Tile>,
     pub entities: Grid<Vec<hecs::Entity>>,
     pub blocked: Grid<bool>,
+    pub explored: Grid<bool>,
 }
 
 impl Map {
@@ -336,11 +349,13 @@ impl Map {
         let tiles = Grid::new(w, h, Tile::Wall);
         let entities = Grid::new(w, h, vec![]);
         let blocked = Grid::new(w, h, false);
+        let explored = Grid::new(w, h, false);
         Map {
             entrance: pt(0, 0),
             tiles,
             entities,
             blocked,
+            explored,
         }
     }
 
