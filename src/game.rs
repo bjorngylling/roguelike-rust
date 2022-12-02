@@ -1,7 +1,7 @@
 use crate::{
     fov,
     geom::{pt, Grid, Point},
-    gfx,
+    gfx::{self, Renderable},
     scene::{Scene, Transition},
 };
 use ggez::{
@@ -10,7 +10,6 @@ use ggez::{
     input::keyboard::{KeyCode, KeyInput, KeyMods},
     Context, GameResult,
 };
-use hecs;
 use std::collections::HashSet;
 
 pub struct GameState {
@@ -53,6 +52,7 @@ pub struct Game {
     height: i32,
     move_reader: shrev::ReaderId<Event>,
     collision_reader: shrev::ReaderId<Event>,
+    damage_reader: shrev::ReaderId<Event>,
 }
 
 impl Game {
@@ -60,31 +60,34 @@ impl Game {
         let mut instances = graphics::InstanceArray::new(ctx, state.sprite_set.img.clone());
         instances.resize(ctx, (width * height) as u32 + 50); // mapsize + 50 entities
 
-        state.world.insert(
-            state.hero,
-            (
-                Player,
-                Name("Hero".to_string()),
-                Position(state.map.entrance),
-                BlocksTile,
-                gfx::Renderable {
-                    spr: state.sprite_set.src_by_idx(gfx::CP437::ChAt as i32),
-                    color: gfx::WHITE_BRIGHT,
-                },
-                Viewshed {
-                    visible_tiles: HashSet::new(),
-                    range: 7,
-                    dirty: true,
-                },
-            ),
-        );
+        state
+            .world
+            .insert(
+                state.hero,
+                (
+                    Player,
+                    Name("Hero".to_string()),
+                    Position(state.map.entrance),
+                    BlocksTile,
+                    gfx::Renderable {
+                        spr: gfx::CP437::ChAt,
+                        color: gfx::WHITE_BRIGHT,
+                    },
+                    Viewshed {
+                        visible_tiles: HashSet::new(),
+                        range: 7,
+                        dirty: true,
+                    },
+                ),
+            )
+            .expect("hero entity missing");
         state.world.spawn((
             Name("Giant Ant".to_string()),
             AI,
             Position(pt(20, 13)),
             BlocksTile,
             gfx::Renderable {
-                spr: state.sprite_set.src_by_idx(gfx::CP437::Cha as i32),
+                spr: gfx::CP437::Cha,
                 color: gfx::BLUE_BRIGHT,
             },
         ));
@@ -94,9 +97,18 @@ impl Game {
             Position(state.map.entrance + pt(10, -1).to_vector()),
             BlocksTile,
             gfx::Renderable {
-                spr: state.sprite_set.src_by_idx(gfx::CP437::Cha as i32),
+                spr: gfx::CP437::Cha,
                 color: gfx::BLUE_BRIGHT,
             },
+        ));
+        state.world.spawn((
+            Name("Exploding Flask".to_string()),
+            Position(state.map.entrance + pt(1, -1).to_vector()),
+            gfx::Renderable {
+                spr: gfx::CP437::Trap,
+                color: gfx::YELLOW_BRIGHT,
+            },
+            Explosive { radius: 3 },
         ));
         Game {
             instances,
@@ -104,6 +116,7 @@ impl Game {
             height,
             move_reader: state.chan.register_reader(),
             collision_reader: state.chan.register_reader(),
+            damage_reader: state.chan.register_reader(),
         }
     }
 }
@@ -114,6 +127,7 @@ impl Scene<GameState> for Game {
         if input_handler(&state.input, state.hero, &mut state.chan) {
             // Monsters only act when the player acts
             ai_handler(&state.world, &mut state.chan);
+            explosion_handler(&mut state.world);
         }
         move_handler(
             &mut state.world,
@@ -121,7 +135,13 @@ impl Scene<GameState> for Game {
             &mut state.chan,
             &mut self.move_reader,
         );
-        collision_handler(&mut state.world, &state.chan, &mut self.collision_reader);
+        collision_handler(
+            &mut state.world,
+            &state.map,
+            &mut state.chan,
+            &mut self.collision_reader,
+        );
+        damage_handler(&mut state.world, &state.chan, &mut self.damage_reader);
         fov_handler(&mut state.world, &state.map.tiles, &mut state.map.explored);
 
         Transition::None
@@ -149,16 +169,17 @@ impl Scene<GameState> for Game {
                     let t = map_layer[(x, y)];
                     let d: Vec2 = pos.to_f32().to_array().into();
                     let spr = match t {
-                        Tile::Floor => state.sprite_set.src_by_idx(gfx::CP437::ChDot as i32),
-                        Tile::StairUp => state.sprite_set.src_by_idx(gfx::CP437::LessThan as i32),
-                        _ => state.sprite_set.src_by_idx(gfx::CP437::Pillar as i32),
+                        Tile::Floor => gfx::CP437::ChDot,
+                        Tile::StairUp => gfx::CP437::LessThan,
+                        _ => gfx::CP437::Pillar,
                     };
-                    let mut draw = graphics::DrawParam::new().dest(d * 12.).src(spr);
+                    let mut draw = graphics::DrawParam::new()
+                        .dest(d * 12.)
+                        .src(state.sprite_set.src(spr));
                     if explored && !in_los {
                         draw.color.a *= 0.2;
                     }
-                    self.instances
-                        .push(draw);
+                    self.instances.push(draw);
                 }
             }
         }
@@ -178,7 +199,7 @@ impl Scene<GameState> for Game {
                 self.instances.push(
                     graphics::DrawParam::new()
                         .dest(d * 12.)
-                        .src(renderable.spr)
+                        .src(state.sprite_set.src(renderable.spr))
                         .color(renderable.color),
                 );
             }
@@ -237,25 +258,22 @@ fn move_handler(
 ) {
     let mut collisions: Vec<Event> = vec![];
     for ev in chan.read(r) {
-        match ev {
-            Event::Move(e, m) => {
-                for (pos, viewshed) in
-                    world.query_one_mut::<(&mut Position, Option<&mut Viewshed>)>(*e)
-                {
-                    let n = pos.0 + m.to_vector();
-                    if map.blocked[n] {
-                        for other in &map.entities[n] {
-                            collisions.push(Event::Collision(*e, *other));
-                        }
-                        continue;
-                    }
-                    pos.0 = n;
-                    if let Some(v) = viewshed {
-                        v.dirty = true;
-                    }
+        if let Event::Move(e, m) = ev {
+            if let Ok((pos, viewshed)) =
+                world.query_one_mut::<(&mut Position, Option<&mut Viewshed>)>(*e)
+            {
+                let n = pos.0 + m.to_vector();
+                for other in &map.entities[n] {
+                    collisions.push(Event::Collision(*e, *other));
+                }
+                if map.blocked[n] {
+                    continue;
+                }
+                pos.0 = n;
+                if let Some(v) = viewshed {
+                    v.dirty = true;
                 }
             }
-            _ => (),
         };
     }
     chan.drain_vec_write(&mut collisions);
@@ -297,19 +315,74 @@ fn map_indexing_handler(world: &hecs::World, m: &mut Map) {
     }
 }
 
-fn collision_handler(world: &mut hecs::World, chan: &EventChan, r: &mut shrev::ReaderId<Event>) {
+fn collision_handler(
+    world: &mut hecs::World,
+    map: &Map,
+    chan: &mut EventChan,
+    r: &mut shrev::ReaderId<Event>,
+) {
+    let mut events: Vec<Event> = vec![];
     for ev in chan.read(r) {
-        match ev {
-            Event::Collision(a, b) => {
-                {
-                    let e = world.get::<&Name>(*a).unwrap();
-                    let other = world.get::<&Name>(*b).unwrap();
-                    println!("{} attacks {}.", e.0, other.0,);
-                }
-                world.despawn(*b);
-                ()
+        if let Event::Collision(a, b) = ev {
+            {
+                let mut e = world.query_one::<&Name>(*a).unwrap();
+                let mut other = world.query_one::<&Name>(*b).unwrap();
+                println!(
+                    "{} collided with {}.",
+                    e.get().unwrap_or(&Name("unnamed".to_string())).0,
+                    other.get().unwrap_or(&Name("unnamed".to_string())).0
+                );
             }
-            _ => (),
+
+            // Player attacks AI
+            if let Ok(true) = world.satisfies::<&Player>(*a) {
+                if let Ok(true) = world.satisfies::<&AI>(*b) {
+                    events.push(Event::TakeDamage(*b, 1));
+                }
+            }
+
+            // Colliding with Explosive sets it off
+            let mut cmd = hecs::CommandBuffer::new();
+            if let Ok(pos) = world.query_one_mut::<hecs::With<&Position, &Explosive>>(*b) {
+                for p in [pt(0, 0), pt(1, 0), pt(-1, 0), pt(0, -1), pt(0, 1)] {
+                    let n = pos.0 + p.to_vector();
+                    cmd.spawn((
+                        Explosion { duration_left: 1 },
+                        Position(n),
+                        Renderable {
+                            spr: gfx::CP437::Filled3,
+                            color: gfx::RED,
+                        },
+                    ));
+                    for other in &map.entities[n] {
+                        if other != b {
+                            events.push(Event::TakeDamage(*other, 1))
+                        }
+                    }
+                }
+                cmd.despawn(*b);
+            }
+            cmd.run_on(world);
+        }
+    }
+    chan.drain_vec_write(&mut events);
+}
+
+fn explosion_handler(world: &mut hecs::World) {
+    let mut cmd = hecs::CommandBuffer::new();
+    for (e, exp) in world.query_mut::<&mut Explosion>() {
+        exp.duration_left -= 1;
+        if exp.duration_left == 0 {
+            cmd.despawn(e);
+        }
+    }
+    cmd.run_on(world);
+}
+
+fn damage_handler(world: &mut hecs::World, chan: &EventChan, r: &mut shrev::ReaderId<Event>) {
+    for ev in chan.read(r) {
+        if let Event::TakeDamage(e, _dmg) = ev {
+            world.despawn(*e).expect("failed to despawn entity");
         }
     }
 }
@@ -319,23 +392,29 @@ type EventChan = shrev::EventChannel<Event>;
 enum Event {
     Move(hecs::Entity, Point),
     Collision(hecs::Entity, hecs::Entity),
+    TakeDamage(hecs::Entity, i32),
 }
 
+// Components
 struct Position(Point);
 struct BlocksTile;
-
 struct Viewshed {
     visible_tiles: HashSet<Point>,
     range: i32,
     dirty: bool,
 }
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Name(String);
-
 struct Player;
 struct AI;
+struct Explosive {
+    radius: u8,
+}
+struct Explosion {
+    duration_left: u8,
+}
 
+// Map
 pub struct Map {
     pub entrance: Point,
     pub tiles: Grid<Tile>,
@@ -383,16 +462,10 @@ pub enum Tile {
 
 impl Tile {
     fn blocked(&self) -> bool {
-        match self {
-            Tile::Wall => true,
-            _ => false,
-        }
+        matches!(self, Tile::Wall)
     }
 
     fn opaque(&self) -> bool {
-        match self {
-            Tile::Wall => true,
-            _ => false,
-        }
+        matches!(self, Tile::Wall)
     }
 }

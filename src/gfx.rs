@@ -113,13 +113,17 @@ pub enum CP437 {
     GreaterThan = 62,
     ChAt = 64,
     ChA = 65,
+    Trap = 94,
     Cha = 97,
-    Filled = 219,
+    Filled1 = 176,
+    Filled2 = 177,
+    Filled3 = 178,
+    Filled4 = 219,
 }
 
 #[derive(Copy, Clone)]
 pub struct Renderable {
-    pub spr: graphics::Rect,
+    pub spr: CP437,
     pub color: graphics::Color,
 }
 
@@ -153,26 +157,14 @@ impl SpriteSet {
         }
     }
 
-    pub fn src_by_idx(&self, idx: i32) -> graphics::Rect {
+    pub fn src(&self, t: CP437) -> graphics::Rect {
+        let idx = t as i32;
         if idx >= self.rows * self.cols {
             panic!("accessing sprite by idx outside sheet bounds at {}", idx)
         } else {
             graphics::Rect::new(
                 (idx % self.cols) as f32 * self.tile_width,
                 (idx / self.cols) as f32 * self.tile_width,
-                self.tile_width,
-                self.tile_height,
-            )
-        }
-    }
-
-    pub fn src(&self, x: i32, y: i32) -> graphics::Rect {
-        if x >= self.rows || y >= self.cols {
-            panic!("accessing sprite outside sheet bounds at {},{}", x, y)
-        } else {
-            graphics::Rect::new(
-                self.tile_width * x as f32,
-                self.tile_height * y as f32,
                 self.tile_width,
                 self.tile_height,
             )

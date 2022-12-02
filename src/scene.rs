@@ -11,8 +11,10 @@ pub trait Scene<T> {
 
 pub enum Transition<T> {
     None,
+    #[allow(dead_code)]
     Push(Box<dyn Scene<T>>),
     Pop,
+    #[allow(dead_code)]
     Replace(Box<dyn Scene<T>>),
 }
 
@@ -66,7 +68,7 @@ impl<T> SceneStack<T> {
             if curr.draw_previous() {
                 SceneStack::draw_scenes(rest, ctx, state)
             }
-            curr.draw(ctx, state);
+            curr.draw(ctx, state).expect("failed to draw scene");
         }
     }
 
