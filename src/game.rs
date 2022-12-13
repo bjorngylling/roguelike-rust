@@ -10,6 +10,7 @@ use ggez::{
     input::keyboard::{KeyCode, KeyInput, KeyMods},
     Context, GameResult,
 };
+use core::time;
 use std::collections::HashSet;
 
 pub struct GameState {
@@ -53,6 +54,7 @@ pub struct Game {
     move_reader: shrev::ReaderId<Event>,
     collision_reader: shrev::ReaderId<Event>,
     damage_reader: shrev::ReaderId<Event>,
+    dt: time::Duration,
 }
 
 impl Game {
@@ -117,17 +119,17 @@ impl Game {
             move_reader: state.chan.register_reader(),
             collision_reader: state.chan.register_reader(),
             damage_reader: state.chan.register_reader(),
+            dt: time::Duration::default(),
         }
     }
 }
 
 impl Scene<GameState> for Game {
-    fn update(&mut self, _ctx: &mut Context, state: &mut GameState) -> Transition<GameState> {
+    fn update(&mut self, ctx: &mut Context, state: &mut GameState) -> Transition<GameState> {
         map_indexing_handler(&state.world, &mut state.map);
         if input_handler(&state.input, state.hero, &mut state.chan) {
             // Monsters only act when the player acts
             ai_handler(&state.world, &mut state.chan);
-            explosion_handler(&mut state.world);
         }
         move_handler(
             &mut state.world,
@@ -143,6 +145,12 @@ impl Scene<GameState> for Game {
         );
         damage_handler(&mut state.world, &state.chan, &mut self.damage_reader);
         fov_handler(&mut state.world, &state.map.tiles, &mut state.map.explored);
+        
+        self.dt += ctx.time.delta();
+        if self.dt > time::Duration::new(0, 100000000) {
+            explosion_handler(&mut state.world);
+            self.dt = time::Duration::default();
+        }
 
         Transition::None
     }
@@ -347,7 +355,7 @@ fn collision_handler(
                 for p in [pt(0, 0), pt(1, 0), pt(-1, 0), pt(0, -1), pt(0, 1)] {
                     let n = pos.0 + p.to_vector();
                     cmd.spawn((
-                        Explosion { duration_left: 1 },
+                        Explosion { duration_left: 6 },
                         Position(n),
                         Renderable {
                             spr: gfx::CP437::Filled3,
@@ -370,10 +378,17 @@ fn collision_handler(
 
 fn explosion_handler(world: &mut hecs::World) {
     let mut cmd = hecs::CommandBuffer::new();
-    for (e, exp) in world.query_mut::<&mut Explosion>() {
+    for (e, (exp, rd)) in world.query_mut::<(&mut Explosion, &mut Renderable)>() {
         exp.duration_left -= 1;
-        if exp.duration_left == 0 {
-            cmd.despawn(e);
+        match exp.duration_left {
+            3 => rd.spr = gfx::CP437::Filled3,
+            2 => rd.spr = gfx::CP437::Filled2,
+            1 => {
+                rd.spr = gfx::CP437::Filled1;
+                rd.color = gfx::YELLOW_BRIGHT;
+            },
+            0 => cmd.despawn(e),
+            _ => (),
         }
     }
     cmd.run_on(world);

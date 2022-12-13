@@ -59,20 +59,20 @@ impl App {
 
 impl event::EventHandler<ggez::GameError> for App {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        const DESIRED_FPS: u32 = 60;
-        while ctx.time.check_update_time(DESIRED_FPS) {
-            self.scenes.update(ctx, &mut self.state);
+        self.scenes.update(ctx, &mut self.state);
 
-            // Clear input
-            self.state.input.key = None;
-            self.state.input.mods = None;
-        }
+        // Clear input
+        self.state.input.key = None;
+        self.state.input.mods = None;
 
         Ok(())
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        self.scenes.draw(ctx, &mut self.state);
+        const DESIRED_FPS: u32 = 60;
+        while ctx.time.check_update_time(DESIRED_FPS) {
+            self.scenes.draw(ctx, &mut self.state);
+        }
         Ok(())
     }
 
